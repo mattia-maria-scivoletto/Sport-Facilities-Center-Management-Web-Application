@@ -1,7 +1,7 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "description": "Web Applications - Exam #3 - Sport",
+  "description": "A web app to manage a sport facilities center, facility reservation and related equipments",
   "main": "index.js",
   "scripts": {
     "start": "node index.mjs",
