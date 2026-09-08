@@ -1,0 +1,10 @@
+.app-container {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.table th,
+.table td {
+  vertical-align: middle;
+}
