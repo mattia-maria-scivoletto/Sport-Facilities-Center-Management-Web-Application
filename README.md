@@ -384,7 +384,7 @@
 
 ## Users Credentials and Initial State
 
-|  username  |  plain-text password  |  initial_score  |   number_of_reservations  |
+|  username  |  plain-text password  |  initial score  |   number of reservations  |
 |------------|-----------------------|-----------------|---------------------------|
 |   alice    |       password        |        0        |            0              |
 |   bob      |       password        |       -2        |            1              |
