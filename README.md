@@ -1,6 +1,3 @@
-# Exam #3: "Sport"
-## Student: s355319 SCIVOLETTO MATTIA MARIA 
-
 ## React Client Application Routes
 
 - Route `/`: Public availability view showing available counts for all sports facility types with its individual status plus rental equipment inventory
@@ -379,7 +376,7 @@
 
 ---
 
-## Screenshot
+## Facility Selection Page
 
 ![Screenshot](./img/facility_selection_page.png)
 
