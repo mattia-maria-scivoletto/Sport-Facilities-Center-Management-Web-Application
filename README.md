@@ -382,7 +382,7 @@
 
 ---
 
-## Users Credentials
+## Users Credentials and Initial State
 
 |  username  |  plain-text password  |  initial_score  |   number_of_reservations  |
 |------------|-----------------------|-----------------|---------------------------|
