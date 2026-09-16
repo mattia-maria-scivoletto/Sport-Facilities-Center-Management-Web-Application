@@ -22,7 +22,7 @@ The application currently features:
 
 ## 💡 Proposed Feature Expansions
 
-### 1. 📅 Time-Slot Scheduling & Interactive Calendar
+### 1. 📅 Time-Slot Scheduling & Interactive Calendar (*Gestione Oraria e Calendario*)
 Currently, reservations operate on real-time current availability. Expanding into time-based bookings turns the service into a full-fledged booking platform.
 
 * **Hourly Time Slots:**
@@ -68,7 +68,7 @@ Eliminate manual page refreshes by pushing live changes directly to connected cl
 
 ---
 
-### 4. 👥 Team Matchmaking & Social Bookings
+### 4. 👥 Team Matchmaking & Social Bookings (*Prenotazioni di Squadra e Matchmaking*)
 Enhance team sports (Soccer, Basketball, Volleyball) with collaborative tools.
 
 * **Teammate Invites:**
@@ -97,7 +97,7 @@ Bridge the digital system with physical sports center operations.
 
 ---
 
-### 6. 💰 Virtual Wallet & Gamification
+### 6. 💰 Virtual Wallet & Gamification (*Crediti e Gamification*)
 Add economic dynamics and positive reinforcement incentives.
 
 * **Virtual Credits System:**
@@ -109,7 +109,7 @@ Add economic dynamics and positive reinforcement incentives.
 
 ---
 
-### 7. 🧪 Automated Testing & DevOps
+### 7. 🧪 Automated Testing & DevOps (*Qualità del Codice e Containerizzazione*)
 Elevate the project to industry-grade standards for portfolio demonstration.
 
 * **Back-End API Tests:**

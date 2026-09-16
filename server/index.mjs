@@ -177,6 +177,98 @@ app.get(
 
 
 
+// POST /api/users
+// Register a new user
+app.post(
+  '/api/users',
+  [
+    check('username')
+      .isString()
+      .trim()
+      .notEmpty()
+      .withMessage('Username is required')
+      .isLength({ min: 3, max: 20 })
+      .withMessage('Username must be between 3 and 20 characters')
+      .matches(/^[a-zA-Z0-9_]+$/)
+      .withMessage('Username can only contain alphanumeric characters and underscores'),
+    check('password')
+      .isString()
+      .notEmpty()
+      .withMessage('Password is required')
+      .isLength({ min: 6 })
+      .withMessage('Password must be at least 6 characters long')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req).formatWith(errorFormatter);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ error: errors.array().join(', ') });
+    }
+
+    const { username, password } = req.body;
+
+    try {
+      const existingUser = await daoUsers.getUserByUsername(username);
+      if (existingUser) {
+        return res.status(409).json({ error: 'Username is already taken' });
+      }
+
+      const newUser = await daoUsers.createUser(username, password);
+      return res.status(201).json({
+        id: newUser.id,
+        username: newUser.username,
+        name: newUser.name,
+        message: 'User registered successfully'
+      });
+    } catch (err) {
+      console.error('Error creating user:', err);
+      return res.status(500).json({ error: 'Failed to create user' });
+    }
+  }
+);
+
+// PUT /api/users/current/password
+// Edit password for the logged-in user
+app.put(
+  '/api/users/current/password',
+  isLoggedIn,
+  [
+    check('oldPassword')
+      .isString()
+      .notEmpty()
+      .withMessage('Current password is required'),
+    check('newPassword')
+      .isString()
+      .notEmpty()
+      .withMessage('New password is required')
+      .isLength({ min: 6 })
+      .withMessage('New password must be at least 6 characters long')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req).formatWith(errorFormatter);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ error: errors.array().join(', ') });
+    }
+
+    const { oldPassword, newPassword } = req.body;
+
+    if (oldPassword === newPassword) {
+      return res.status(422).json({ error: 'New password must be different from current password' });
+    }
+
+    try {
+      const result = await daoUsers.updatePassword(req.user.id, oldPassword, newPassword);
+      if (!result.success) {
+        return res.status(401).json({ error: result.error || 'Failed to update password' });
+      }
+
+      return res.status(200).json({ message: 'Password updated successfully' });
+    } catch (err) {
+      console.error('Error updating password:', err);
+      return res.status(500).json({ error: 'Internal server error while updating password' });
+    }
+  }
+);
+
 // POST /api/sessions
 // login without TOTP/2FA
 app.post('/api/sessions', (req, res, next) => {

@@ -8,6 +8,8 @@ import LoginView from './views/LoginView';
 import TotpView from './views/TotpView';
 import MyReservationsView from './views/MyReservationsView';
 import NewReservationView from './views/NewReservationView';
+import RegisterView from './views/RegisterView';
+import ChangePasswordView from './views/ChangePasswordView';
 
 import API from './services/API';
 import './App.css';
@@ -68,7 +70,7 @@ function App() {
         {/* navigation bar */}
         <Navigation user={user} loggedIn={loggedIn} logout={handleLogout} />
 
-        {/* global alert or feedback message */}
+        {/* Feedback alert message */}
         {feedback && (
           <Container className="mb-3">
             <Alert
@@ -98,6 +100,18 @@ function App() {
                   />
                 ) : (
                   <LoginView login={handleLogin} setFeedback={setFeedback} />
+                )
+              }
+            />
+
+            {/* register route */}
+            <Route
+              path="/register"
+              element={
+                loggedIn ? (
+                  <Navigate to="/reservations" replace />
+                ) : (
+                  <RegisterView setFeedback={setFeedback} />
                 )
               }
             />
@@ -136,6 +150,18 @@ function App() {
               element={
                 loggedIn ? (
                   <NewReservationView user={user} setFeedback={setFeedback} />
+                ) : (
+                  <Navigate to="/login" replace />
+                )
+              }
+            />
+
+            {/* change password route */}
+            <Route
+              path="/change-password"
+              element={
+                loggedIn ? (
+                  <ChangePasswordView setFeedback={setFeedback} />
                 ) : (
                   <Navigate to="/login" replace />
                 )

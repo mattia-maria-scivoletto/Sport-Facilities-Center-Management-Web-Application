@@ -1,3 +1,6 @@
+# Exam #3: "Sport"
+## Student: s355319 SCIVOLETTO MATTIA MARIA 
+
 ## React Client Application Routes
 
 - Route `/`: Public availability view showing available counts for all sports facility types with its individual status plus rental equipment inventory
@@ -5,10 +8,33 @@
 - Route `/login-totp`: Two-Factor Authentication (2FA) screen for verifying 6-digit TOTP codes generated using secret. Completing 2FA resets negative user score back to 0
 - Route `/reservations`: Protected view displaying all active bookings for the logged-in user with facility identifiers, rented equipment details and buttons to edit equipment or cancel bookings
 - Route `/new-reservation`: Protected booking form allowing users to select facility type, choose manual or automatic facility assignment and configure mandatory and optional equipment with available amount and user score validation
+- Route `/register`: Dedicated view to create and register a new user, with all controls to set username and password
+- Route `/change-password`: Protected view containing form to change user's password
 
 ## List of HTTP API Endpoints Offered by the Backend Server
 
 ### User Management & Authentication
+
+#### User Registration
+* `POST /api/users`
+* Description: Creates a new user account with a unique username, secure scrypt-hashed password, and initial score of 0
+* Request body:
+```JSON
+{
+  "username": "federico",
+  "password": "password123"
+}
+```
+* Response: `201 Created`
+```JSON
+{
+  "id": 5,
+  "username": "federico",
+  "name": "Federico",
+  "message": "User registered successfully"
+}
+```
+* Error responses: `409 Conflict`, `422 Unprocessable Entity`, `500 Internal Server Error`
 
 #### Login (1-Factor Authentication)
 * `POST /api/sessions`
@@ -86,6 +112,24 @@
 }
 ```
 * Error responses: `401 Unauthorized`, `500 Internal Server Error`
+
+#### Change Password
+* `PUT /api/users/current/password`
+* Description: Updates the password of the currently authenticated user after verifying the current password
+* Request body:
+```JSON
+{
+  "oldPassword": "current_password",
+  "newPassword": "new_password"
+}
+```
+* Response: `200 OK`
+```JSON
+{
+  "message": "Password updated successfully"
+}
+```
+* Error responses: `401 Unauthorized` (incorrect current password), `422 Unprocessable Entity` (validation failure or same password), `500 Internal Server Error`
 
 ---
 
@@ -365,9 +409,11 @@
 
 ## Main React Components
 
-- `Navigation` (in `src/components/Navigation.jsx`): Navbar displaying application sections, score badge, 2FA status and buttons to logout and perform 2FA authentication
+- `Navigation` (in `src/components/Navigation.jsx`): Navbar displaying application sections, score badge, and an Account dropdown menu containing actions for 2FA authentication, password change, and logout
 - `PublicView` (in `src/views/PublicView.jsx`): Overview of all 6 facility types with status badges for each facility, plus the rental equipment table
 - `LoginView` (in `src/views/LoginView.jsx`): User credentials authentication form with password visibility toggle
+- `RegisterView` (in `src/views/RegisterView.jsx`): New user registration form with validation, password confirmation, and error handling
+- `ChangePasswordView` (in `src/views/ChangePasswordView.jsx`): Account password update form with current password verification and confirmation checks
 - `TotpView` (in `src/views/TotpView.jsx`): 2-Factor Authentication screen for TOTP validation with score reset explanation
 - `MyReservationsView` (in `src/views/MyReservationsView.jsx`): User reservations dashboard with equipment details, edit equipment modal trigger, and cancellation confirmation dialog with score warnings
 - `NewReservationView` (in `src/views/NewReservationView.jsx`): 2 step booking creation interface supporting manual or automatic facility selection, mandatory equipment locking, and score restrictions
@@ -376,15 +422,15 @@
 
 ---
 
-## Facility Selection Page
+## Screenshot
 
 ![Screenshot](./img/facility_selection_page.png)
 
 ---
 
-## Users Credentials and Initial State
+## Users Credentials
 
-|  username  |  plain-text password  |  initial score  |   number of reservations  |
+|  username  |  plain-text password  |  initial_score  |   number_of_reservations  |
 |------------|-----------------------|-----------------|---------------------------|
 |   alice    |       password        |        0        |            0              |
 |   bob      |       password        |       -2        |            1              |

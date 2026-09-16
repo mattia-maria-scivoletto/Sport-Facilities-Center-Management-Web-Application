@@ -130,6 +130,32 @@ const logOut = async () => {
   );
 };
 
+const register = async (userData) => {
+  return getJson(
+    fetch(SERVER_URL + 'users', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify(userData)
+    })
+  );
+};
+
+const changePassword = async ({ oldPassword, newPassword }) => {
+  return getJson(
+    fetch(SERVER_URL + 'users/current/password', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      credentials: 'include',
+      body: JSON.stringify({ oldPassword, newPassword })
+    })
+  );
+};
+
 const API = {
   getPublicAvailability,
   getFacilityTypes,
@@ -140,6 +166,8 @@ const API = {
   updateReservationEquipment,
   deleteReservation,
   logIn,
+  register,
+  changePassword,
   totpVerify,
   getUserInfo,
   logOut

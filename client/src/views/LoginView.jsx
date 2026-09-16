@@ -94,6 +94,12 @@ function LoginView({ login, setFeedback }) {
                   <Button variant="primary" type="submit" size="lg" disabled={submitting}>
                     {submitting ? 'Logging in...' : 'Sign In'}
                   </Button>
+                  <div className="text-center my-2 text-muted small">
+                    Don't have an account?{' '}
+                    <Link to="/register" className="fw-semibold text-decoration-none">
+                      Register here
+                    </Link>
+                  </div>
                   <Button as={Link} to="/" variant="outline-secondary">
                     Cancel & Back to Public View
                   </Button>
