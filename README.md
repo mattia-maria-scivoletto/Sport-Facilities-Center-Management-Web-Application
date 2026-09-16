@@ -1,6 +1,3 @@
-# Exam #3: "Sport"
-## Student: s355319 SCIVOLETTO MATTIA MARIA 
-
 ## React Client Application Routes
 
 - Route `/`: Public availability view showing available counts for all sports facility types with its individual status plus rental equipment inventory
@@ -429,6 +426,10 @@
 ---
 
 ## Users Credentials
+Please note that when restarting the back end, a Javascript file called init-db.mjs is run
+and database state is taken to the starting one, whose users are those below.
+This is to have the application database on a well-defined and well-known
+starting status. Every other user created later will go lost
 
 |  username  |  plain-text password  |  initial_score  |   number_of_reservations  |
 |------------|-----------------------|-----------------|---------------------------|
