@@ -55,7 +55,9 @@ function NewReservationView({ user, setFeedback }) {
 
   const [facilityTypes, setFacilityTypes] = useState([]);
   const [allFacilities, setAllFacilities] = useState([]);
-  const [selectedType, setSelectedType] = useState(searchParams.get('facilityTypeId') || '');
+  const [selectedType, setSelectedType] = useState(
+    searchParams.get('facilityTypeId') || searchParams.get('typeId') || ''
+  );
   const [assignmentMode, setAssignmentMode] = useState(
     searchParams.get('facilityId') ? 'manual' : 'auto'
   );
@@ -85,8 +87,23 @@ function NewReservationView({ user, setFeedback }) {
         if (!ignore) {
           setFacilityTypes(types || []);
           setAllFacilities(facilities || []);
-          if (types && types.length > 0) {
-            setSelectedType((prev) => prev || types[0].id);
+          let curType = selectedType;
+          if (!curType && types && types.length > 0) {
+            curType = types[0].id;
+            setSelectedType(curType);
+          }
+          const available = (facilities || []).filter(
+            (f) => f.facilityTypeId === curType && f.isAvailable === 1
+          );
+          if (available.length > 0) {
+            setSelectedFacilityId((prev) => {
+              if (!prev || !available.some((f) => f.id === prev)) {
+                return available[0].id;
+              }
+              return prev;
+            });
+          } else {
+            setSelectedFacilityId('');
           }
           setLoading(false);
         }
@@ -101,7 +118,7 @@ function NewReservationView({ user, setFeedback }) {
     return () => {
       ignore = true;
     };
-  }, [bookingDate, timeSlot]);
+  }, [bookingDate, timeSlot, selectedType]);
 
   // Load rules and inventory for selected type, date & slot
   useEffect(() => {
@@ -119,20 +136,6 @@ function NewReservationView({ user, setFeedback }) {
             initialQty[r.equipmentTypeId] = r.minQuantity;
           }
           setEquipmentQuantities(initialQty);
-
-          const availableOfThisType = allFacilities.filter(
-            (f) => f.facilityTypeId === selectedType && f.isAvailable === 1
-          );
-          if (availableOfThisType.length > 0) {
-            setSelectedFacilityId((prev) => {
-              if (!prev || !availableOfThisType.some((f) => f.id === prev)) {
-                return availableOfThisType[0].id;
-              }
-              return prev;
-            });
-          } else {
-            setSelectedFacilityId('');
-          }
           setLoadingRules(false);
         }
       })
@@ -347,8 +350,13 @@ function NewReservationView({ user, setFeedback }) {
                       size="lg"
                       value={selectedType}
                       onChange={(e) => {
+                        const newType = e.target.value;
                         setLoadingRules(true);
-                        setSelectedType(e.target.value);
+                        setSelectedType(newType);
+                        const available = allFacilities.filter(
+                          (f) => f.facilityTypeId === newType && f.isAvailable === 1
+                        );
+                        setSelectedFacilityId(available.length > 0 ? available[0].id : '');
                       }}
                     >
                       {facilityTypes.map((ft) => (

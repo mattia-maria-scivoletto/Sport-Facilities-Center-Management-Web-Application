@@ -98,14 +98,20 @@ const isLoggedIn = (req, res, next) => {
 };
 
 const isAdminOrStaff = (req, res, next) => {
-  if (req.isAuthenticated() && (req.user.role === 'admin' || req.user.role === 'staff')) {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  if (req.user.role === 'admin' || req.user.role === 'staff') {
     return next();
   }
   return res.status(403).json({ error: 'Access denied: Admin or Staff privileges required' });
 };
 
 const isAdmin = (req, res, next) => {
-  if (req.isAuthenticated() && req.user.role === 'admin') {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: 'Not authenticated' });
+  }
+  if (req.user.role === 'admin') {
     return next();
   }
   return res.status(403).json({ error: 'Access denied: Admin privileges required' });
@@ -553,18 +559,19 @@ app.post(
           });
         }
       } else {
-        selectedFacility = await daoFacilities.getFacilityManualSelection(
-          facilityId,
-          resolvedDate,
-          resolvedStartTime
-        );
+        selectedFacility = await daoFacilities.getFacilityManualSelection(facilityId);
         if (!selectedFacility) {
           return res.status(422).json({
-            error: `Facility ${facilityId} is not available on ${resolvedDate} at ${resolvedStartTime} or does not exist.`
+            error: `Facility ${facilityId} does not exist.`
           });
         }
         if (selectedFacility.facilityTypeId !== facilityTypeId) {
           return res.status(422).json({ error: `Facility ${facilityId} is not of type ${facilityTypeId}.` });
+        }
+        if (selectedFacility.isMaintenance === 1) {
+          return res.status(422).json({
+            error: `Facility ${selectedFacility.name} is currently under maintenance (${selectedFacility.maintenanceReason || 'Scheduled maintenance'}).`
+          });
         }
       }
 

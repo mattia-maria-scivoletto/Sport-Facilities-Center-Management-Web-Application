@@ -163,21 +163,13 @@ const getFacilityEquipmentRules = (facilityTypeId, bookingDate, startTime, exclu
   });
 };
 
-// get available facility for manual selection in a date and slot
-const getFacilityManualSelection = (facilityId, bookingDate, startTime) => {
-  const date = resolveDate(bookingDate);
-  const time = resolveTime(startTime);
-
+// get facility for manual selection
+const getFacilityManualSelection = (facilityId) => {
   return new Promise((resolve, reject) => {
     const sql = `SELECT id, facility_type_id AS facilityTypeId, name, is_maintenance AS isMaintenance, maintenance_reason AS maintenanceReason
                 FROM facilities 
-                WHERE id = ? 
-                AND is_maintenance = 0
-                AND id NOT IN (
-                  SELECT facility_id FROM reservations 
-                  WHERE booking_date = ? AND start_time = ?
-                );`;
-    db.get(sql, [facilityId, date, time], (err, row) => {
+                WHERE id = ?;`;
+    db.get(sql, [facilityId], (err, row) => {
       if (err) reject(err);
       else resolve(row);
     });
