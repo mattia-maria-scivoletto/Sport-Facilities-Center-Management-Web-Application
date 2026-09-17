@@ -137,7 +137,9 @@
 #### Public Availability Overview
 * `GET /api/public/availability`
 * Description: Returns counts and court statuses for all facility types and dynamic rental equipment stock. Supports optional query parameters `date` (YYYY-MM-DD, defaults to today) and `timeSlot` (HH:MM, e.g. 10:00, defaults to 10:00)
-* Query parameters: `?date=YYYY-MM-DD&timeSlot=HH:MM` (optional)
+* Query parameters:
+  - `date` (YYYY-MM-DD)
+  - `timeSlot` (HH:MM, optional)
 * Request body: *None*
 * Response: `200 OK`
 ```JSON
@@ -203,7 +205,9 @@
 
 * `GET /api/facility-types/:typeId/rules`
 * Description: Retrieves equipment rental rules (mandatory minimums, optional items, and dynamic slot-based inventory) for a given facility type
-* Query parameters: `?date=YYYY-MM-DD&timeSlot=HH:MM` (optional)
+* Query parameters:
+  - `date` (YYYY-MM-DD)
+  - `timeSlot` (HH:MM, optional)
 * Request body: *None*
 * Response: `200 OK`
 ```JSON
@@ -229,8 +233,9 @@
 #### All Individual Facilities
 * `GET /api/facilities`
 * Description: Retrieves all individual facilities with availability status for a selected date and time slot
-* Authentication: Required (logged in user session)
-* Query parameters: `?date=YYYY-MM-DD&timeSlot=HH:MM` (optional, defaults to today at 10:00)
+* Query parameters:
+  - `date` (YYYY-MM-DD)
+  - `timeSlot` (HH:MM, optional, defaults to today at 10:00)
 * Request body: *None*
 * Response: `200 OK`
 ```JSON
@@ -305,7 +310,6 @@
 #### Interactive Schedule Calendar Matrix
 * `GET /api/schedule/calendar`
 * Description: Returns full schedule matrix including all facilities, facility types, and booked reservations with ownership flag (`isMine`) for visual calendar/timeline representation
-* Authentication: Optional (publicly viewable; `isMine` evaluates to `true` for reservations belonging to the authenticated user)
 * Query parameters:
   - `startDate` (YYYY-MM-DD, optional, defaults to today)
   - `endDate` (YYYY-MM-DD, optional, defaults to 6 days after startDate)
@@ -412,7 +416,7 @@
   "endTime": "15:00"
 }
 ```
-* Error responses: `401 Unauthorized`, `403 Forbidden` (score violation or 30 seconds cooldown active), `409 Conflict` / `422 Unprocessable Content` (facility double-booking collision, missing mandatory equipment, or insufficient stock), `500 Internal Server Error`
+* Error responses: `401 Unauthorized`, `403 Forbidden`, `409 Conflict` / `422 Unprocessable Content`, `500 Internal Server Error`
 
 #### Edit Equipment Quantities For an Existing Reservation
 * `PUT /api/reservations/:reservationId/equipment`
@@ -475,7 +479,7 @@
   "equipmentUtilization": [ ... ]
 }
 ```
-* Error responses: `401 Unauthorized`, `403 Forbidden` (non-admin/staff), `500 Internal Server Error`
+* Error responses: `401 Unauthorized`, `403 Forbidden`, `500 Internal Server Error`
 
 #### Admin Facilities Management
 * `GET /api/admin/facilities`
@@ -530,11 +534,12 @@
   "totalQuantity": 10
 }
 ```
-* Error responses: `401 Unauthorized`, `403 Forbidden`, `422 Unprocessable Entity` (e.g. stock cannot fall below active rentals), `500 Internal Server Error`
+* Error responses: `401 Unauthorized`, `403 Forbidden`, `422 Unprocessable Entity`, `500 Internal Server Error`
 
 #### Registered Users Overview
 * `GET /api/admin/users`
-* Description: Protected endpoint returning all registered users with their penalty score, 2FA status, role, and total reservations count
+* Description: Protected endpoint returning all registered users with their penalty score, 2FA status, role
+and total reservations count
 * Request body: *None*
 * Response: `200 OK`
 * Error responses: `401 Unauthorized`, `403 Forbidden`, `500 Internal Server Error`
@@ -544,7 +549,7 @@
 * Description: Admin-only endpoint to assign or modify user roles (`'user' | 'admin' | 'staff'`)
 * Request body: `{"role": "staff"}`
 * Response: `200 OK`
-* Error responses: `401 Unauthorized`, `403 Forbidden` (only admin), `422 Unprocessable Entity`, `500 Internal Server Error`
+* Error responses: `401 Unauthorized`, `403 Forbidden`, `422 Unprocessable Entity`, `500 Internal Server Error`
 
 ---
 
