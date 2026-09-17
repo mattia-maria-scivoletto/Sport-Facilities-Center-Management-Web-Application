@@ -4,7 +4,7 @@ import crypto from 'crypto';
 // return user by id
 const getUserById = (id) => {
   return new Promise((resolve, reject) => {
-    const sql = 'SELECT id, username, score, totp_secret, lastTotpStep FROM users WHERE id = ?';
+    const sql = 'SELECT id, username, score, totp_secret, lastTotpStep, role FROM users WHERE id = ?';
     db.get(sql, [id], (err, row) => {
       if (err) {
         reject(err);
@@ -17,7 +17,8 @@ const getUserById = (id) => {
           name: row.username.charAt(0).toUpperCase() + row.username.slice(1),
           score: row.score,
           secret: row.totp_secret,
-          lastTotpStep: row.lastTotpStep
+          lastTotpStep: row.lastTotpStep,
+          role: row.role || 'user'
         };
         resolve(user);
       }
@@ -41,7 +42,8 @@ const getUser = (username, password) => {
           name: row.username.charAt(0).toUpperCase() + row.username.slice(1),
           score: row.score,
           secret: row.totp_secret,
-          lastTotpStep: row.lastTotpStep
+          lastTotpStep: row.lastTotpStep,
+          role: row.role || 'user'
         };
 
         crypto.scrypt(password, row.salt, 32, function (err, hashedPassword) {
@@ -134,23 +136,51 @@ const getUserByUsername = (username) => {
 };
 
 // create new user
-const createUser = (username, password) => {
+const createUser = (username, password, role = 'user') => {
   return new Promise((resolve, reject) => {
     const salt = crypto.randomBytes(16).toString('hex');
     crypto.scrypt(password, salt, 32, (err, hashedPassword) => {
       if (err) return reject(err);
       const passwordHash = hashedPassword.toString('hex');
       const sql =
-        'INSERT INTO users (username, password_hash, salt, score, totp_secret, lastTotpStep) VALUES (?, ?, ?, 0, ?, 0)';
-      db.run(sql, [username.trim(), passwordHash, salt, 'LXBSMDTMSP2I5XFXIYRGFVWSFI'], function (dbErr) {
+        'INSERT INTO users (username, password_hash, salt, score, totp_secret, lastTotpStep, role) VALUES (?, ?, ?, 0, ?, 0, ?)';
+      db.run(sql, [username.trim(), passwordHash, salt, 'LXBSMDTMSP2I5XFXIYRGFVWSFI', role], function (dbErr) {
         if (dbErr) return reject(dbErr);
         resolve({
           id: this.lastID,
           username: username.trim(),
           name: username.trim().charAt(0).toUpperCase() + username.trim().slice(1),
-          score: 0
+          score: 0,
+          role: role
         });
       });
+    });
+  });
+};
+
+// get all registered users for admin dashboard
+const getAllUsers = () => {
+  return new Promise((resolve, reject) => {
+    const sql = `
+      SELECT u.id, u.username, u.score, u.role, u.lastTotpStep,
+             COUNT(r.id) as reservationCount
+      FROM users u
+      LEFT JOIN reservations r ON u.id = r.user_id
+      GROUP BY u.id
+      ORDER BY u.id ASC
+    `;
+    db.all(sql, [], (err, rows) => {
+      if (err) return reject(err);
+      const users = (rows || []).map((r) => ({
+        id: r.id,
+        username: r.username,
+        name: r.username.charAt(0).toUpperCase() + r.username.slice(1),
+        score: r.score,
+        role: r.role || 'user',
+        isTotp: r.lastTotpStep > 0,
+        reservationCount: r.reservationCount || 0
+      }));
+      resolve(users);
     });
   });
 };
@@ -190,14 +220,31 @@ const updatePassword = (userId, oldPassword, newPassword) => {
   });
 };
 
+// update user role (admin only)
+const updateUserRole = (userId, newRole) => {
+  return new Promise((resolve, reject) => {
+    const validRoles = ['user', 'admin', 'staff'];
+    if (!validRoles.includes(newRole)) {
+      return reject(new Error('Invalid role'));
+    }
+    const sql = 'UPDATE users SET role = ? WHERE id = ?';
+    db.run(sql, [newRole, userId], function (err) {
+      if (err) return reject(err);
+      resolve({ updated: this.changes > 0, userId, role: newRole });
+    });
+  });
+};
+
 export default {
   getUserById,
   getUser,
   getUserByUsername,
   createUser,
+  getAllUsers,
   updatePassword,
   updateLastTotpStep,
   resetUserScoreToZero,
   decreaseUserScore,
-  getUserScore
+  getUserScore,
+  updateUserRole
 };

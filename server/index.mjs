@@ -97,19 +97,33 @@ const isLoggedIn = (req, res, next) => {
   return res.status(401).json({ error: 'Not authenticated' });
 };
 
+const isAdminOrStaff = (req, res, next) => {
+  if (req.isAuthenticated() && (req.user.role === 'admin' || req.user.role === 'staff')) {
+    return next();
+  }
+  return res.status(403).json({ error: 'Access denied: Admin or Staff privileges required' });
+};
+
+const isAdmin = (req, res, next) => {
+  if (req.isAuthenticated() && req.user.role === 'admin') {
+    return next();
+  }
+  return res.status(403).json({ error: 'Access denied: Admin privileges required' });
+};
 
 const errorFormatter = ({ msg, path, location }) => `${location}[${path}]: ${msg}`;
-
 
 async function formatClientUserInfo(req) {
   const user = req.user;
   const freshUser = await daoUsers.getUserById(user.id);
   const score = freshUser ? freshUser.score : 0;
+  const role = freshUser ? freshUser.role : 'user';
   return {
     id: user.id,
     username: user.username,
     name: user.username.charAt(0).toUpperCase() + user.username.slice(1),
     score: score,
+    role: role,
     canDoTotp: true,
     isTotp: req.session.method === 'totp'
   };
@@ -766,6 +780,149 @@ app.delete(
     } catch (err) {
       console.error('Error deleting reservation:', err);
       return res.status(500).json({ error: 'Internal server error while deleting reservation' });
+    }
+  }
+);
+
+// ==========================================
+// ADMIN & FACILITY MANAGER API ROUTES
+// ==========================================
+
+// GET /api/admin/analytics
+// Get overall operational KPIs, sport popularity, peak utilization, and cancellation trends
+app.get('/api/admin/analytics', isAdminOrStaff, async (req, res) => {
+  try {
+    const analytics = await daoReservations.getAdminAnalytics();
+    return res.status(200).json(analytics);
+  } catch (err) {
+    console.error('Error fetching admin analytics:', err);
+    return res.status(500).json({ error: 'Internal server error while fetching analytics' });
+  }
+});
+
+// GET /api/admin/facilities
+// Get all facilities with maintenance status and booking stats
+app.get('/api/admin/facilities', isAdminOrStaff, async (req, res) => {
+  try {
+    const facilities = await daoFacilities.getAllAdminFacilities();
+    return res.status(200).json(facilities);
+  } catch (err) {
+    console.error('Error fetching admin facilities:', err);
+    return res.status(500).json({ error: 'Internal server error while fetching facilities' });
+  }
+});
+
+// PATCH /api/admin/facilities/:id/maintenance
+// Toggle maintenance mode for an individual court/field with custom reason banner
+app.patch(
+  '/api/admin/facilities/:id/maintenance',
+  isAdminOrStaff,
+  [
+    check('isMaintenance').isBoolean().withMessage('isMaintenance must be a boolean')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req).formatWith(errorFormatter);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ error: errors.array().join(', ') });
+    }
+
+    try {
+      const facilityId = req.params.id;
+      const { isMaintenance, maintenanceReason } = req.body;
+      const result = await daoFacilities.toggleFacilityMaintenance(
+        facilityId,
+        isMaintenance,
+        maintenanceReason
+      );
+      return res.status(200).json({
+        message: `Facility ${facilityId} maintenance mode successfully ${isMaintenance ? 'enabled' : 'disabled'}.`,
+        ...result
+      });
+    } catch (err) {
+      console.error('Error updating facility maintenance mode:', err);
+      return res.status(500).json({ error: 'Failed to update maintenance mode' });
+    }
+  }
+);
+
+// GET /api/admin/equipment
+// Get equipment stock inventory and active rental allocations
+app.get('/api/admin/equipment', isAdminOrStaff, async (req, res) => {
+  try {
+    const equipment = await daoFacilities.getAllAdminEquipment();
+    return res.status(200).json(equipment);
+  } catch (err) {
+    console.error('Error fetching admin equipment:', err);
+    return res.status(500).json({ error: 'Internal server error while fetching equipment inventory' });
+  }
+});
+
+// PATCH /api/admin/equipment/:id
+// Adjust total inventory quantity with validation against active bookings
+app.patch(
+  '/api/admin/equipment/:id',
+  isAdminOrStaff,
+  [
+    check('totalQuantity').isInt({ min: 1 }).withMessage('totalQuantity must be an integer of at least 1')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req).formatWith(errorFormatter);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ error: errors.array().join(', ') });
+    }
+
+    try {
+      const equipmentTypeId = req.params.id;
+      const totalQuantity = parseInt(req.body.totalQuantity, 10);
+      const result = await daoFacilities.updateEquipmentQuantity(equipmentTypeId, totalQuantity);
+      return res.status(200).json({
+        message: `Equipment ${equipmentTypeId} total inventory adjusted to ${totalQuantity}.`,
+        ...result
+      });
+    } catch (err) {
+      console.error('Error updating equipment inventory:', err);
+      return res.status(422).json({ error: err.message || 'Failed to update equipment inventory' });
+    }
+  }
+);
+
+// GET /api/admin/users
+// Get user management list with scores, roles, and reservations
+app.get('/api/admin/users', isAdminOrStaff, async (req, res) => {
+  try {
+    const users = await daoUsers.getAllUsers();
+    return res.status(200).json(users);
+  } catch (err) {
+    console.error('Error fetching users:', err);
+    return res.status(500).json({ error: 'Internal server error while fetching users' });
+  }
+});
+
+// PATCH /api/admin/users/:id/role
+// Update user role (admin-only)
+app.patch(
+  '/api/admin/users/:id/role',
+  isAdmin,
+  [
+    check('role').isIn(['user', 'admin', 'staff']).withMessage('Role must be user, admin, or staff')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req).formatWith(errorFormatter);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ error: errors.array().join(', ') });
+    }
+
+    try {
+      const userId = parseInt(req.params.id, 10);
+      const { role } = req.body;
+      const result = await daoUsers.updateUserRole(userId, role);
+      return res.status(200).json({
+        message: `User #${userId} role successfully updated to ${role}.`,
+        ...result
+      });
+    } catch (err) {
+      console.error('Error updating user role:', err);
+      return res.status(500).json({ error: 'Failed to update user role' });
     }
   }
 );

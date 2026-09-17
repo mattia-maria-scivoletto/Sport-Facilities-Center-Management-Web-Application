@@ -90,6 +90,9 @@ function ScheduleCalendarView({ loggedIn }) {
   };
 
   const handleSlotClick = (facility, slot) => {
+    if (facility.isMaintenance === 1) {
+      return;
+    }
     const existing = getSlotReservation(facility.id, slot.start);
     if (existing) {
       if (existing.isMine) {
@@ -113,12 +116,9 @@ function ScheduleCalendarView({ loggedIn }) {
       {/* Header Section */}
       <div className="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
         <div>
-          <h2 className="fw-bold mb-1">
+          <h2 className="fw-bold mb-0">
             <i className="bi bi-calendar3 me-2 text-primary"></i> Interactive Schedule Calendar
           </h2>
-          <p className="text-muted mb-0">
-            Real-time court availability matrix and time-slot booking system
-          </p>
         </div>
         <div className="d-flex gap-2">
           <Button as={Link} to="/" variant="outline-secondary">
@@ -138,8 +138,8 @@ function ScheduleCalendarView({ loggedIn }) {
       {/* Control Bar: Date Selector & Sport Filter */}
       <Card className="shadow-sm border-0 mb-4 bg-white">
         <Card.Body className="p-3">
-          <Row className="g-3 align-items-center">
-            <Col xs={12} md={5} lg={4}>
+          <Row className="g-3 align-items-center mb-3">
+            <Col xs={12} sm={6} md={5} lg={4}>
               <Form.Label className="fw-semibold small text-muted mb-1">Select Date</Form.Label>
               <div className="input-group">
                 <Button variant="outline-primary" size="sm" onClick={handlePrevDay} title="Previous Day">
@@ -164,11 +164,10 @@ function ScheduleCalendarView({ loggedIn }) {
               </div>
             </Col>
 
-            <Col xs={12} md={3} lg={3}>
+            <Col xs={12} sm={6} md={4} lg={3}>
               <Form.Label className="fw-semibold small text-muted mb-1">Filter by Sport</Form.Label>
               <Form.Select
                 size="sm"
-                style={{ maxWidth: '200px' }}
                 value={selectedType}
                 onChange={(e) => {
                   setLoading(true);
@@ -183,23 +182,26 @@ function ScheduleCalendarView({ loggedIn }) {
                 ))}
               </Form.Select>
             </Col>
-
-            {/* Legend */}
-            <Col xs={12} md={4} lg={5}>
-              <Form.Label className="fw-semibold small text-muted mb-1">Status Legend</Form.Label>
-              <div className="d-flex flex-nowrap align-items-center gap-2 overflow-auto py-1">
-                <Badge bg="success" className="p-2 fw-normal d-inline-flex align-items-center text-nowrap">
-                  <i className="bi bi-check-circle me-1"></i> Available (Click to book)
-                </Badge>
-                <Badge bg="danger" className="p-2 fw-normal d-inline-flex align-items-center text-nowrap">
-                  <i className="bi bi-lock-fill me-1"></i> Booked
-                </Badge>
-                <Badge bg="warning" text="dark" className="p-2 fw-normal d-inline-flex align-items-center text-nowrap">
-                  <i className="bi bi-star-fill me-1"></i> My Reservation
-                </Badge>
-              </div>
-            </Col>
           </Row>
+
+          {/* Status Legend below */}
+          <div className="pt-2 border-top">
+            <Form.Label className="fw-semibold small text-muted mb-1 d-block">Status Legend</Form.Label>
+            <div className="d-flex flex-wrap align-items-center gap-2">
+              <Badge bg="success" className="p-2 fw-normal d-inline-flex align-items-center text-nowrap">
+                <i className="bi bi-check-circle me-1"></i> Available (Click to book)
+              </Badge>
+              <Badge bg="danger" className="p-2 fw-normal d-inline-flex align-items-center text-nowrap">
+                <i className="bi bi-lock-fill me-1"></i> Booked
+              </Badge>
+              <Badge bg="warning" text="dark" className="p-2 fw-normal d-inline-flex align-items-center text-nowrap">
+                <i className="bi bi-star-fill me-1"></i> My Reservation
+              </Badge>
+              <Badge bg="secondary" className="p-2 fw-normal d-inline-flex align-items-center text-nowrap">
+                <i className="bi bi-tools me-1"></i> Maintenance
+              </Badge>
+            </div>
+          </div>
         </Card.Body>
       </Card>
 
@@ -216,13 +218,10 @@ function ScheduleCalendarView({ loggedIn }) {
         </div>
       ) : (
         <Card className="shadow-sm border-0">
-          <Card.Header className="bg-light py-3 d-flex justify-content-between align-items-center">
+          <Card.Header className="bg-light py-3">
             <h5 className="mb-0 fw-bold">
               Timeline for {dayjs(selectedDate).format('dddd, MMMM D, YYYY')}
             </h5>
-            <small className="text-muted">
-              Showing {filteredFacilities.length} court(s) across 14 time slots
-            </small>
           </Card.Header>
           <Card.Body className="p-0">
             <div className="table-responsive" style={{ maxHeight: '650px' }}>
@@ -247,28 +246,69 @@ function ScheduleCalendarView({ loggedIn }) {
                       </td>
                     </tr>
                   ) : (
-                    filteredFacilities.map((facility) => (
-                      <tr key={facility.id}>
-                        <td className="text-start ps-3 fw-bold bg-light">
-                          <div>{facility.name}</div>
-                          <small className="text-muted fw-normal">{facility.typeName} ({facility.id})</small>
-                        </td>
+                    filteredFacilities.map((facility) => {
+                      const isCourtMaint = facility.isMaintenance === 1;
+                      return (
+                        <tr key={facility.id} className={isCourtMaint ? 'table-secondary' : ''}>
+                          <td className="text-start ps-3 fw-bold bg-light">
+                            <div className="d-flex align-items-center justify-content-between">
+                              <span>{facility.name}</span>
+                              {isCourtMaint && (
+                                <Badge bg="warning" text="dark" className="ms-1" style={{ fontSize: '0.75rem' }}>
+                                  <i className="bi bi-tools me-1"></i> Maint.
+                                </Badge>
+                              )}
+                            </div>
+                            <small className="text-muted fw-normal">{facility.typeName} ({facility.id})</small>
+                            {isCourtMaint && facility.maintenanceReason && (
+                              <div className="text-warning-emphasis small mt-1 font-monospace" style={{ fontSize: '0.72rem' }}>
+                                {facility.maintenanceReason}
+                              </div>
+                            )}
+                          </td>
 
-                        {TIME_SLOTS.map((slot) => {
-                          const res = getSlotReservation(facility.id, slot.start);
-
-                          if (res) {
-                            if (res.isMine) {
+                          {TIME_SLOTS.map((slot) => {
+                            if (isCourtMaint) {
                               return (
                                 <td
                                   key={slot.start}
-                                  className="bg-warning-subtle text-dark p-1"
-                                  style={{ cursor: 'pointer' }}
-                                  onClick={() => handleSlotClick(facility, slot)}
-                                  title={`Your booking! Click to view in My Reservations`}
+                                  className="bg-secondary-subtle text-muted p-1"
+                                  title={`Court under maintenance: ${facility.maintenanceReason || 'Scheduled service'}`}
                                 >
-                                  <Badge bg="warning" text="dark" className="w-100 py-2 d-block">
-                                    <i className="bi bi-star-fill me-1"></i> Mine
+                                  <Badge bg="secondary" className="w-100 py-2 d-block text-nowrap">
+                                    <i className="bi bi-tools me-1"></i> Maint.
+                                  </Badge>
+                                </td>
+                              );
+                            }
+
+                            const res = getSlotReservation(facility.id, slot.start);
+
+                            if (res) {
+                              if (res.isMine) {
+                                return (
+                                  <td
+                                    key={slot.start}
+                                    className="bg-warning-subtle text-dark p-1"
+                                    style={{ cursor: 'pointer' }}
+                                    onClick={() => handleSlotClick(facility, slot)}
+                                    title={`Your booking! Click to view in My Reservations`}
+                                  >
+                                    <Badge bg="warning" text="dark" className="w-100 py-2 d-block">
+                                      <i className="bi bi-star-fill me-1"></i> Mine
+                                    </Badge>
+                                  </td>
+                                );
+                              }
+
+                              return (
+                                <td
+                                  key={slot.start}
+                                  className="bg-danger-subtle text-danger p-1"
+                                  title={`Booked: ${slot.start}-${slot.end}`}
+                                >
+                                  <Badge bg="danger" className="w-100 py-2 d-block">
+                                    <i className="bi bi-lock-fill me-1"></i> Booked
                                   </Badge>
                                 </td>
                               );
@@ -277,37 +317,25 @@ function ScheduleCalendarView({ loggedIn }) {
                             return (
                               <td
                                 key={slot.start}
-                                className="bg-danger-subtle text-danger p-1"
-                                title={`Booked: ${slot.start}-${slot.end}`}
+                                className="p-1"
+                                style={{ cursor: 'pointer', transition: 'background-color 0.15s' }}
+                                onClick={() => handleSlotClick(facility, slot)}
+                                title={`Free slot: ${slot.start}-${slot.end}. Click to book!`}
                               >
-                                <Badge bg="danger" className="w-100 py-2 d-block">
-                                  <i className="bi bi-lock-fill me-1"></i> Booked
-                                </Badge>
+                                <Button
+                                  variant="outline-success"
+                                  size="sm"
+                                  className="w-100 py-1 px-1 border-0 bg-success-subtle text-success fw-semibold"
+                                  style={{ fontSize: '0.8rem' }}
+                                >
+                                  Free
+                                </Button>
                               </td>
                             );
-                          }
-
-                          return (
-                            <td
-                              key={slot.start}
-                              className="p-1"
-                              style={{ cursor: 'pointer', transition: 'background-color 0.15s' }}
-                              onClick={() => handleSlotClick(facility, slot)}
-                              title={`Free slot: ${slot.start}-${slot.end}. Click to book!`}
-                            >
-                              <Button
-                                variant="outline-success"
-                                size="sm"
-                                className="w-100 py-1 px-1 border-0 bg-success-subtle text-success fw-semibold"
-                                style={{ fontSize: '0.8rem' }}
-                              >
-                                Free
-                              </Button>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))
+                          })}
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </Table>

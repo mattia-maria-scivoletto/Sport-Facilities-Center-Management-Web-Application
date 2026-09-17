@@ -236,6 +236,10 @@ function NewReservationView({ user, setFeedback }) {
     (f) => f.facilityTypeId === selectedType && f.isAvailable === 1
   );
 
+  const maintenanceCourtsOfSelectedType = allFacilities.filter(
+    (f) => f.facilityTypeId === selectedType && f.isMaintenance === 1
+  );
+
   const availableTimeSlots = getAvailableTimeSlots(bookingDate);
 
   const isNegativeScore = user && user.score < 0;
@@ -244,10 +248,7 @@ function NewReservationView({ user, setFeedback }) {
     <Container className="pb-5">
       <div className="mb-4 bg-light p-4 rounded shadow-sm d-flex flex-wrap justify-content-between align-items-center gap-3">
         <div>
-          <h2 className="mb-1 fw-bold">New Facility & Equipment Reservation</h2>
-          <p className="text-muted mb-0">
-            Book sports facilities for a specific date and time slot with equipment rental
-          </p>
+          <h2 className="mb-0 fw-bold">New Facility & Equipment Reservation</h2>
         </div>
         <Button as={Link} to="/calendar" variant="outline-primary">
           <i className="bi bi-calendar3 me-1"></i> View Schedule Calendar
@@ -403,6 +404,16 @@ function NewReservationView({ user, setFeedback }) {
                       )}
                     </Form.Group>
                   )}
+
+                  {maintenanceCourtsOfSelectedType.length > 0 && (
+                    <div className="alert alert-warning py-2 px-3 small mt-3 mb-0">
+                      <i className="bi bi-tools me-2 text-warning-emphasis"></i>
+                      <strong>Court Maintenance Notice:</strong>{' '}
+                      {maintenanceCourtsOfSelectedType
+                        .map((f) => `${f.name} (${f.id}) is unavailable: "${f.maintenanceReason || 'Service in progress'}"`)
+                        .join('; ')}
+                    </div>
+                  )}
                 </Card.Body>
               </Card>
             </Col>
@@ -451,11 +462,11 @@ function NewReservationView({ user, setFeedback }) {
                                 <div>
                                   {isMandatory ? (
                                     <Badge bg="danger" className="me-1">
-                                      Mandatory
+                                      mandatory
                                     </Badge>
                                   ) : (
                                     <Badge bg="secondary" className="me-1">
-                                      Optional
+                                      optional
                                     </Badge>
                                   )}
                                 </div>

@@ -17,14 +17,17 @@ CREATE TABLE users (
     score INTEGER NOT NULL DEFAULT 0,
     totp_secret TEXT NOT NULL DEFAULT 'LXBSMDTMSP2I5XFXIYRGFVWSFI',
     lastTotpStep INTEGER,
+    role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user', 'admin', 'staff')),
     CONSTRAINT check_score CHECK (score <= 0)
 );
 
 -- Passwords for all users are 'password'
-INSERT INTO users VALUES(1,'alice','26b0d1286ba396077d2372a6375b27d6be4834b20a5ab141cc34a9b17024f3bf','salt_alice_982347',0,'LXBSMDTMSP2I5XFXIYRGFVWSFI',0);
-INSERT INTO users VALUES(2,'bob','e50c1e8346cf266bfe9d40be12bc25c7eef64c611929a12d70c8152cd92e03e6','salt_bob_192837',-2,'LXBSMDTMSP2I5XFXIYRGFVWSFI',0);
-INSERT INTO users VALUES(3,'carol','97b2c21b479773bdb8ac8b2b35e275f15b59ebea12cd00c34bb2331dd566b998','salt_charlie_583920',-1,'LXBSMDTMSP2I5XFXIYRGFVWSFI',59569451);
-INSERT INTO users VALUES(4,'dave','f55aadff759bd12386d1484e393aa214ab0a2341e27002a34febe3a890a7f1c9','salt_diana_847291',0,'LXBSMDTMSP2I5XFXIYRGFVWSFI',59565691);
+INSERT INTO users VALUES(1,'alice','26b0d1286ba396077d2372a6375b27d6be4834b20a5ab141cc34a9b17024f3bf','salt_alice_982347',0,'LXBSMDTMSP2I5XFXIYRGFVWSFI',0,'admin');
+INSERT INTO users VALUES(2,'bob','e50c1e8346cf266bfe9d40be12bc25c7eef64c611929a12d70c8152cd92e03e6','salt_bob_192837',-2,'LXBSMDTMSP2I5XFXIYRGFVWSFI',0,'user');
+INSERT INTO users VALUES(3,'carol','97b2c21b479773bdb8ac8b2b35e275f15b59ebea12cd00c34bb2331dd566b998','salt_charlie_583920',-1,'LXBSMDTMSP2I5XFXIYRGFVWSFI',59569451,'user');
+INSERT INTO users VALUES(4,'dave','f55aadff759bd12386d1484e393aa214ab0a2341e27002a34febe3a890a7f1c9','salt_diana_847291',0,'LXBSMDTMSP2I5XFXIYRGFVWSFI',59565691,'user');
+INSERT INTO users VALUES(5,'admin','26b0d1286ba396077d2372a6375b27d6be4834b20a5ab141cc34a9b17024f3bf','salt_alice_982347',0,'LXBSMDTMSP2I5XFXIYRGFVWSFI',0,'admin');
+INSERT INTO users VALUES(6,'staff','26b0d1286ba396077d2372a6375b27d6be4834b20a5ab141cc34a9b17024f3bf','salt_alice_982347',0,'LXBSMDTMSP2I5XFXIYRGFVWSFI',0,'staff');
 
 CREATE TABLE facility_types (
     id TEXT PRIMARY KEY,
@@ -42,23 +45,25 @@ CREATE TABLE facilities (
     id TEXT PRIMARY KEY,
     facility_type_id TEXT NOT NULL,
     name TEXT NOT NULL,
+    is_maintenance INTEGER NOT NULL DEFAULT 0 CHECK (is_maintenance IN (0, 1)),
+    maintenance_reason TEXT DEFAULT NULL,
     FOREIGN KEY (facility_type_id) REFERENCES facility_types (id) ON DELETE CASCADE
 );
 
-INSERT INTO facilities VALUES('T1','TENNIS','Tennis Court #1');
-INSERT INTO facilities VALUES('T2','TENNIS','Tennis Court #2');
-INSERT INTO facilities VALUES('T3','TENNIS','Tennis Court #3');
-INSERT INTO facilities VALUES('B1','BASKETBALL','Basketball Court #1');
-INSERT INTO facilities VALUES('B2','BASKETBALL','Basketball Court #2');
-INSERT INTO facilities VALUES('V1','VOLLEYBALL','Volleyball Court #1');
-INSERT INTO facilities VALUES('V2','VOLLEYBALL','Volleyball Court #2');
-INSERT INTO facilities VALUES('S1','SOCCER','Soccer Field #1');
-INSERT INTO facilities VALUES('TT1','TABLE_TENNIS','Table Tennis Table #1');
-INSERT INTO facilities VALUES('TT2','TABLE_TENNIS','Table Tennis Table #2');
-INSERT INTO facilities VALUES('TT3','TABLE_TENNIS','Table Tennis Table #3');
-INSERT INTO facilities VALUES('TT4','TABLE_TENNIS','Table Tennis Table #4');
-INSERT INTO facilities VALUES('C1','CYCLING','Cycling Track #1');
-INSERT INTO facilities VALUES('C2','CYCLING','Cycling Track #2');
+INSERT INTO facilities VALUES('T1','TENNIS','Tennis Court #1', 0, NULL);
+INSERT INTO facilities VALUES('T2','TENNIS','Tennis Court #2', 1, 'Clay court resurfacing & line repainting');
+INSERT INTO facilities VALUES('T3','TENNIS','Tennis Court #3', 0, NULL);
+INSERT INTO facilities VALUES('B1','BASKETBALL','Basketball Court #1', 0, NULL);
+INSERT INTO facilities VALUES('B2','BASKETBALL','Basketball Court #2', 0, NULL);
+INSERT INTO facilities VALUES('V1','VOLLEYBALL','Volleyball Court #1', 0, NULL);
+INSERT INTO facilities VALUES('V2','VOLLEYBALL','Volleyball Court #2', 0, NULL);
+INSERT INTO facilities VALUES('S1','SOCCER','Soccer Field #1', 0, NULL);
+INSERT INTO facilities VALUES('TT1','TABLE_TENNIS','Table Tennis Table #1', 0, NULL);
+INSERT INTO facilities VALUES('TT2','TABLE_TENNIS','Table Tennis Table #2', 0, NULL);
+INSERT INTO facilities VALUES('TT3','TABLE_TENNIS','Table Tennis Table #3', 0, NULL);
+INSERT INTO facilities VALUES('TT4','TABLE_TENNIS','Table Tennis Table #4', 0, NULL);
+INSERT INTO facilities VALUES('C1','CYCLING','Cycling Track #1', 0, NULL);
+INSERT INTO facilities VALUES('C2','CYCLING','Cycling Track #2', 0, NULL);
 
 CREATE TABLE equipment_types (
     id TEXT PRIMARY KEY,
@@ -140,6 +145,10 @@ CREATE TABLE facility_release_logs (
     FOREIGN KEY (facility_type_id) REFERENCES facility_types (id) ON DELETE CASCADE
 );
 
+-- Seed release logs for cancellation analytics
+INSERT INTO facility_release_logs (id, user_id, facility_type_id, released_at) VALUES(1, 2, 'BASKETBALL', datetime('now', '-2 hours'));
+INSERT INTO facility_release_logs (id, user_id, facility_type_id, released_at) VALUES(2, 3, 'TENNIS', datetime('now', '-4 hours'));
+
 CREATE TABLE IF NOT EXISTS "reservation_equipment" (
     reservation_id INTEGER NOT NULL,
     equipment_type_id TEXT NOT NULL,
@@ -162,8 +171,9 @@ INSERT INTO reservation_equipment VALUES(4,'TT_RACKET',2);
 INSERT INTO reservation_equipment VALUES(4,'TT_BALL',1);
 
 DELETE FROM sqlite_sequence;
-INSERT INTO sqlite_sequence VALUES('users',4);
+INSERT INTO sqlite_sequence VALUES('users',6);
 INSERT INTO sqlite_sequence VALUES('reservations',4);
+INSERT INTO sqlite_sequence VALUES('facility_release_logs',2);
 
 CREATE UNIQUE INDEX idx_facility_release_user_facility 
 ON facility_release_logs (user_id, facility_type_id);

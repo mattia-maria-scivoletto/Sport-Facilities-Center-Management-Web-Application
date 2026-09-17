@@ -76,10 +76,7 @@ function PublicView({ loggedIn }) {
       {/* Header Banner */}
       <div className="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3 bg-light p-4 rounded shadow-sm">
         <div>
-          <h2 className="mb-1 fw-bold">Sports Center Availability</h2>
-          <p className="text-muted mb-0">
-            View available sports courts, fields, and equipment inventory per date & time slot
-          </p>
+          <h2 className="mb-0 fw-bold">Sports Center Availability</h2>
         </div>
         <div className="d-flex flex-wrap gap-2">
           <Button as={Link} to="/calendar" variant="outline-primary" className="fw-semibold">
@@ -194,18 +191,47 @@ function PublicView({ loggedIn }) {
                           <small className="fw-semibold text-secondary d-block mb-2">
                             Court Identifiers:
                           </small>
-                          <div className="d-flex flex-wrap gap-1">
-                            {fac.facilityCodes.map((fc) => (
-                              <Badge
-                                key={fc.code}
-                                bg={fc.isBooked ? 'danger' : 'success'}
-                                className="px-2 py-1"
-                                title={fc.isBooked ? 'Booked' : 'Available'}
-                              >
-                                {fc.code} {fc.isBooked ? '✕' : '✓'}
-                              </Badge>
-                            ))}
+                          <div className="d-flex flex-wrap gap-1 mb-2">
+                            {fac.facilityCodes.map((fc) => {
+                              let badgeBg = 'success';
+                              let badgeText = 'white';
+                              let symbol = '✓';
+                              let tooltip = 'Available';
+
+                              if (fc.isMaintenance) {
+                                badgeBg = 'warning';
+                                badgeText = 'dark';
+                                symbol = '🔧';
+                                tooltip = `Maintenance: ${fc.maintenanceReason || 'Scheduled maintenance'}`;
+                              } else if (fc.isBooked) {
+                                badgeBg = 'danger';
+                                badgeText = 'white';
+                                symbol = '✕';
+                                tooltip = 'Booked';
+                              }
+
+                              return (
+                                <Badge
+                                  key={fc.code}
+                                  bg={badgeBg}
+                                  text={badgeText}
+                                  className="px-2 py-1"
+                                  title={tooltip}
+                                >
+                                  {fc.code} {symbol}
+                                </Badge>
+                              );
+                            })}
                           </div>
+                          {fac.facilityCodes.some((fc) => fc.isMaintenance) && (
+                            <div className="text-warning-emphasis small bg-warning-subtle p-1 rounded border border-warning-subtle">
+                              <i className="bi bi-tools me-1"></i>
+                              {fac.facilityCodes
+                                .filter((fc) => fc.isMaintenance)
+                                .map((fc) => `${fc.code}: ${fc.maintenanceReason || 'Under maintenance'}`)
+                                .join(' | ')}
+                            </div>
+                          )}
                         </div>
                       </Card.Body>
                     </Card>

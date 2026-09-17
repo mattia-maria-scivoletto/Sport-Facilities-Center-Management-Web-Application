@@ -104,10 +104,7 @@ function MyReservationsView({ user, setUser, setFeedback }) {
       {/* header banner */}
       <div className="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3 bg-light p-4 rounded shadow-sm">
         <div>
-          <h2 className="mb-1 fw-bold">My Reservations</h2>
-          <p className="text-muted mb-0">
-            Manage your booked facilities and adjust rental sports equipment
-          </p>
+          <h2 className="mb-0 fw-bold">My Reservations</h2>
         </div>
         <div className="d-flex gap-2">
           <Button as={Link} to="/calendar" variant="outline-primary" className="fw-semibold">

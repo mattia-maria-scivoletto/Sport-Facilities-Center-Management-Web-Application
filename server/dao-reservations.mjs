@@ -268,6 +268,149 @@ const deleteReservationAndRelatedEquipments = (reservationId) => {
   });
 };
 
+// get admin operational analytics and insights
+const getAdminAnalytics = () => {
+  return new Promise((resolve, reject) => {
+    // 1. KPI Counts
+    const kpiSql = `
+      SELECT 
+        (SELECT COUNT(*) FROM reservations) AS totalReservations,
+        (SELECT COUNT(*) FROM reservations WHERE booking_date >= date('now')) AS activeReservations,
+        (SELECT COUNT(*) FROM facility_release_logs) AS totalCancellations,
+        (SELECT COUNT(*) FROM users) AS totalUsers,
+        (SELECT COUNT(*) FROM users WHERE score < 0) AS totalPenalizedUsers,
+        (SELECT COUNT(*) FROM facilities) AS totalFacilities,
+        (SELECT COUNT(*) FROM facilities WHERE is_maintenance = 1) AS maintenanceFacilities;
+    `;
+
+    // 2. Discipline Popularity
+    const disciplineSql = `
+      SELECT 
+        ft.id AS typeId,
+        ft.name AS typeName,
+        COUNT(r.id) AS bookingCount
+      FROM facility_types ft
+      LEFT JOIN facilities f ON f.facility_type_id = ft.id
+      LEFT JOIN reservations r ON r.facility_id = f.id
+      GROUP BY ft.id, ft.name
+      ORDER BY bookingCount DESC, ft.name;
+    `;
+
+    // 3. Hourly utilization across the 14 time slots
+    const hourlySql = `
+      SELECT 
+        r.start_time AS startTime,
+        COUNT(r.id) AS bookingCount
+      FROM reservations r
+      GROUP BY r.start_time
+      ORDER BY r.start_time;
+    `;
+
+    // 4. Facility utilization
+    const facilitySql = `
+      SELECT 
+        f.id AS facilityId,
+        f.name AS facilityName,
+        ft.name AS typeName,
+        f.is_maintenance AS isMaintenance,
+        f.maintenance_reason AS maintenanceReason,
+        COUNT(r.id) AS bookingCount
+      FROM facilities f
+      JOIN facility_types ft ON ft.id = f.facility_type_id
+      LEFT JOIN reservations r ON r.facility_id = f.id
+      GROUP BY f.id, f.name, ft.name, f.is_maintenance, f.maintenance_reason
+      ORDER BY bookingCount DESC, f.id;
+    `;
+
+    // 5. Recent cancellations & release logs
+    const cancellationsSql = `
+      SELECT 
+        frl.id,
+        u.username,
+        u.score AS currentScore,
+        frl.facility_type_id AS facilityTypeId,
+        ft.name AS typeName,
+        frl.released_at AS releasedAt
+      FROM facility_release_logs frl
+      JOIN users u ON u.id = frl.user_id
+      JOIN facility_types ft ON ft.id = frl.facility_type_id
+      ORDER BY frl.released_at DESC
+      LIMIT 10;
+    `;
+
+    // 6. Equipment utilization summary
+    const equipmentSql = `
+      SELECT 
+        eq.id,
+        eq.name,
+        eq.total_quantity AS totalQuantity,
+        COALESCE(SUM(re.quantity), 0) AS totalUnitsRented
+      FROM equipment_types eq
+      LEFT JOIN reservation_equipment re ON re.equipment_type_id = eq.id
+      GROUP BY eq.id, eq.name, eq.total_quantity
+      ORDER BY totalUnitsRented DESC, eq.id;
+    `;
+
+    db.get(kpiSql, [], (err, kpis) => {
+      if (err) return reject(err);
+
+      db.all(disciplineSql, [], (err2, disciplines) => {
+        if (err2) return reject(err2);
+
+        db.all(hourlySql, [], (err3, hourlyRows) => {
+          if (err3) return reject(err3);
+
+          db.all(facilitySql, [], (err4, facilityRows) => {
+            if (err4) return reject(err4);
+
+            db.all(cancellationsSql, [], (err5, cancelRows) => {
+              if (err5) return reject(err5);
+
+              db.all(equipmentSql, [], (err6, equipmentRows) => {
+                if (err6) return reject(err6);
+
+                const totalResCount = kpis.totalReservations || 1;
+                const disciplinePopularity = disciplines.map((d) => ({
+                  ...d,
+                  percentage: Math.round((d.bookingCount / (totalResCount || 1)) * 100)
+                }));
+
+                const allHourlySlots = [
+                  '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00',
+                  '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00'
+                ];
+                const hourlyMap = new Map();
+                for (const row of hourlyRows) {
+                  hourlyMap.set(row.startTime, row.bookingCount);
+                }
+                const hourlyUtilization = allHourlySlots.map((slot) => {
+                  const [h] = slot.split(':').map(Number);
+                  const nextH = String(h + 1).padStart(2, '0');
+                  const count = hourlyMap.get(slot) || 0;
+                  return {
+                    slot,
+                    label: `${slot} - ${nextH}:00`,
+                    bookingCount: count
+                  };
+                });
+
+                resolve({
+                  kpis,
+                  disciplinePopularity,
+                  hourlyUtilization,
+                  facilityUtilization: facilityRows,
+                  recentCancellations: cancelRows,
+                  equipmentUtilization: equipmentRows
+                });
+              });
+            });
+          });
+        });
+      });
+    });
+  });
+};
+
 export default {
   getUserReservations,
   checkCooldownConstraint,
@@ -279,4 +422,5 @@ export default {
   getReservedEquipmentsbyReservation,
   updateReservationEquipments,
   deleteReservationAndRelatedEquipments,
+  getAdminAnalytics,
 };

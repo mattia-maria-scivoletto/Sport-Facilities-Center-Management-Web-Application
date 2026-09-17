@@ -17,11 +17,11 @@ function ScoreBadge({ score, isTotp }) {
             : 'Normal score (0). Full booking and equipment privileges.'
         }
       >
-        Score: {score}
+        score: {score}
         {isNegative && ' (Penalty)'}
       </Badge>
       {isTotp && (
-        <Badge bg="info" text="dark" style={{ fontSize: '0.75rem', padding: '5px 8px' }}>
+        <Badge bg="info" text="dark" style={{ fontSize: '0.85rem', padding: '6px 10px' }}>
           2FA Active
         </Badge>
       )}

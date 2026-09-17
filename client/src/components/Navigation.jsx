@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navbar, Nav, Container, Button, Dropdown, NavDropdown } from 'react-bootstrap';
+import { Navbar, Nav, Container, Button, Dropdown, NavDropdown, Badge } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import ScoreBadge from './ScoreBadge';
 
@@ -27,12 +27,10 @@ function Navigation({ user, loggedIn, logout }) {
               <NavDropdown.Item as={Link} to="/reservations">
                 <i className="bi bi-calendar-check me-2"></i> My Reservations
               </NavDropdown.Item>
+              <NavDropdown.Item as={Link} to={loggedIn ? '/new-reservation' : '/login'}>
+                <i className="bi bi-plus-circle me-2"></i> New Reservation
+              </NavDropdown.Item>
             </NavDropdown>
-            {loggedIn && (
-              <Nav.Link as={Link} to="/new-reservation" className="text-warning fw-semibold">
-                + New Reservation
-              </Nav.Link>
-            )}
           </Nav>
 
           <Nav className="align-items-center gap-3">
@@ -40,6 +38,15 @@ function Navigation({ user, loggedIn, logout }) {
               <>
                 <div className="text-light d-flex align-items-center gap-2">
                   <span>Welcome, <strong>{user.name || user.username}</strong></span>
+                  {(user.role === 'admin' || user.role === 'staff') && (
+                    <Badge
+                      bg={user.role === 'admin' ? 'danger' : 'info'}
+                      className="text-lowercase"
+                      style={{ fontSize: '0.85rem', padding: '6px 10px' }}
+                    >
+                      {user.role}
+                    </Badge>
+                  )}
                   <ScoreBadge score={user.score} isTotp={user.isTotp} />
                 </div>
 
@@ -49,6 +56,11 @@ function Navigation({ user, loggedIn, logout }) {
                   </Dropdown.Toggle>
 
                   <Dropdown.Menu>
+                    {(user.role === 'admin' || user.role === 'staff') && (
+                      <Dropdown.Item onClick={() => navigate('/admin')}>
+                        <i className="bi bi-speedometer2 text-info me-2"></i> Admin Dashboard
+                      </Dropdown.Item>
+                    )}
                     {!user.isTotp && (
                       <Dropdown.Item onClick={() => navigate('/login-totp')}>
                         <i className="bi bi-shield-lock text-info me-2"></i> Enable 2FA

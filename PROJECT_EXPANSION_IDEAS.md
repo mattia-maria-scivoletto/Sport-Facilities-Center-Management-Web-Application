@@ -26,7 +26,7 @@ The application currently features:
 Transformed the service from static real-time availability into a full-fledged time-slot booking platform with interactive visual matrix navigation and robust collision prevention.
 
 * **Hourly Time Slots (08:00 – 22:00):**
-  - Selectable booking dates (from today up to 14 days in advance) and 14 hourly slots (`08:00–09:00` to `21:00–22:00`).
+  - Selectable booking dates (from today up to 14 days in advance) and 14 hourly slots (`08:00-09:00` to `21:00-22:00`).
   - Integrated into Step 1 of the reservation wizard and public availability views.
 * **Collision Detection Engine:**
   - Database schema expansion: added `booking_date`, `start_time`, `end_time` columns to table `reservations` with strict `UNIQUE (facility_id, booking_date, start_time)` constraint.
@@ -42,21 +42,28 @@ Transformed the service from static real-time availability into a full-fledged t
 
 ---
 
-### 2. 🛡️ Admin & Facility Manager Dashboard (*Role-Based Access Control - RBAC*)
-Introduce administrative privileges to manage sports facilities and oversee center operations.
+### 2. 🛡️ Admin & Facility Manager Dashboard (*Role-Based Access Control - RBAC*) — ✅ *Implemented*
+Introduced administrative privileges and operational management tools to oversee center facilities and equipment.
 
-* **User Roles:**
-  - Add `role` column (`'user' | 'admin' | 'staff'`) in the `users` table.
-  - Protect administrative routes with an `isAdmin` middleware in Express and an `<AdminRoute />` guard in React.
+* **User Roles (RBAC):**
+  - Added `role` column (`'user' | 'admin' | 'staff'`) to the `users` table (seeded `alice` and `admin` as `admin`, `staff` as `staff`).
+  - Protected administrative endpoints (`/api/admin/*`) with `isAdminOrStaff` / `isAdmin` Express middlewares.
+  - Front-end protected route guard `<AdminRoute />` ensuring only authenticated `admin` and `staff` access `/admin`.
+  - Dynamic navigation links and role badges in the top navigation bar and user account menu.
 * **Facility Maintenance Mode:**
-  - Toggle individual courts/fields into "Maintenance" mode (e.g. Court `T2` resurfacing) with custom warning banners.
+  - Added `is_maintenance` and `maintenance_reason` columns to table `facilities`.
+  - Admin interface to toggle any court or field into maintenance mode with a custom maintenance banner reason (e.g. *"Clay court resurfacing & line repainting"*).
+  - Prevents reservations on maintenance courts across auto and manual selection modes; renders warning notices and maintenance badges across `PublicView`, `ScheduleCalendarView`, and `NewReservationView`.
 * **Equipment Stock Management:**
-  - Admin interface to adjust total inventory (restock new balls, retire damaged rackets).
-* **Analytics & Operational Insights:**
-  - Visual charts using [Chart.js](https://www.chartjs.org/) / `react-chartjs-2` or [Recharts](https://recharts.org/):
-    - Most popular sports disciplines.
-    - Peak utilization hours.
-    - Cancellation rates and penalty trends.
+  - Dedicated admin tab to view total stock, peak active rental allocations across time slots, and historical rentals.
+  - Controls to adjust total inventory, with safety validation ensuring stock cannot be lowered below active bookings in any slot.
+* **Operational Analytics & Visual Insights:**
+  - Live KPI metric overview cards: Total Bookings, Active Bookings, Total Cancellations, Courts in Maintenance, Registered Users, Penalized Users.
+  - Sports discipline popularity breakdown with color-coded percentage progress bars.
+  - Peak hourly utilization breakdown across all 14 time slots (08:00-22:00) with peak hour indicators.
+  - Court utilization table with total reservation counts per court.
+  - Recent cancellation log with user penalty scores and timestamps.
+  - User management table with penalty scores, 2FA status, and admin role adjustment controls.
 
 ---
 

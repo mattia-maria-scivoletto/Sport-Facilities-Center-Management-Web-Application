@@ -7,7 +7,8 @@
 - Route `/new-reservation`: Protected booking form allowing users to select facility type, choose manual or automatic facility assignment and configure mandatory and optional equipment with available amount and user score validation
 - Route `/register`: Dedicated view to create and register a new user, with all controls to set username and password
 - Route `/change-password`: Protected view containing form to change user's password
-- Route `/calendar`: Interactive schedule calendar timeline matrix displaying court availability and reservations across hourly time slots (08:00–22:00) with sport filtering, date navigation, color coding (green = free, red = booked, yellow = my bookings), and direct slot-to-booking shortcuts
+- Route `/calendar`: Interactive schedule calendar timeline matrix displaying court availability and reservations across hourly time slots (08:00-22:00) with sport filtering, date navigation, color coding (green = free, red = booked, yellow = my bookings), and direct slot-to-booking shortcuts
+- Route `/admin`: Protected operations dashboard for admin and staff roles to manage facility maintenance, equipment inventory, operational analytics, and user accounts
 
 ## List of HTTP API Endpoints Offered by the Backend Server
 
@@ -449,14 +450,112 @@
 
 ---
 
+### Admin & Facility Operations Management (RBAC)
+
+#### Operational Analytics & Insights
+* `GET /api/admin/analytics`
+* Description: Protected endpoint for `admin` and `staff` returning comprehensive operational metrics including KPI counters, sport popularity distribution, peak hourly utilization across 14 slots, facility booking frequencies, recent cancellation logs, and equipment utilization summary
+* Request body: *None*
+* Response: `200 OK`
+```JSON
+{
+  "kpis": {
+    "totalReservations": 4,
+    "activeReservations": 4,
+    "totalCancellations": 2,
+    "totalUsers": 6,
+    "totalPenalizedUsers": 2,
+    "totalFacilities": 14,
+    "maintenanceFacilities": 1
+  },
+  "disciplinePopularity": [ ... ],
+  "hourlyUtilization": [ ... ],
+  "facilityUtilization": [ ... ],
+  "recentCancellations": [ ... ],
+  "equipmentUtilization": [ ... ]
+}
+```
+* Error responses: `401 Unauthorized`, `403 Forbidden` (non-admin/staff), `500 Internal Server Error`
+
+#### Admin Facilities Management
+* `GET /api/admin/facilities`
+* Description: Protected endpoint returning all sports courts and fields along with their maintenance status, maintenance reason, and total historical bookings count
+* Request body: *None*
+* Response: `200 OK`
+* Error responses: `401 Unauthorized`, `403 Forbidden`, `500 Internal Server Error`
+
+#### Toggle Court Maintenance Mode
+* `PATCH /api/admin/facilities/:id/maintenance`
+* Description: Protected endpoint to toggle individual courts into or out of maintenance mode with a custom maintenance banner reason
+* Request body:
+```JSON
+{
+  "isMaintenance": true,
+  "maintenanceReason": "Clay court resurfacing & line repainting"
+}
+```
+* Response: `200 OK`
+```JSON
+{
+  "message": "Facility T2 maintenance mode successfully enabled.",
+  "updated": true,
+  "facilityId": "T2",
+  "isMaintenance": true
+}
+```
+* Error responses: `401 Unauthorized`, `403 Forbidden`, `422 Unprocessable Entity`, `500 Internal Server Error`
+
+#### Admin Equipment Stock Inventory
+* `GET /api/admin/equipment`
+* Description: Protected endpoint returning all equipment types, their total physical stock, peak active rental units across time slots, and total units rented all-time
+* Request body: *None*
+* Response: `200 OK`
+* Error responses: `401 Unauthorized`, `403 Forbidden`, `500 Internal Server Error`
+
+#### Adjust Equipment Total Stock
+* `PATCH /api/admin/equipment/:id`
+* Description: Protected endpoint to adjust total inventory quantity. Enforces safety constraint preventing reduction below active bookings in any slot
+* Request body:
+```JSON
+{
+  "totalQuantity": 10
+}
+```
+* Response: `200 OK`
+```JSON
+{
+  "message": "Equipment TENNIS_BALL total inventory adjusted to 10.",
+  "updated": true,
+  "equipmentTypeId": "TENNIS_BALL",
+  "totalQuantity": 10
+}
+```
+* Error responses: `401 Unauthorized`, `403 Forbidden`, `422 Unprocessable Entity` (e.g. stock cannot fall below active rentals), `500 Internal Server Error`
+
+#### Registered Users Overview
+* `GET /api/admin/users`
+* Description: Protected endpoint returning all registered users with their penalty score, 2FA status, role, and total reservations count
+* Request body: *None*
+* Response: `200 OK`
+* Error responses: `401 Unauthorized`, `403 Forbidden`, `500 Internal Server Error`
+
+#### Role Management
+* `PATCH /api/admin/users/:id/role`
+* Description: Admin-only endpoint to assign or modify user roles (`'user' | 'admin' | 'staff'`)
+* Request body: `{"role": "staff"}`
+* Response: `200 OK`
+* Error responses: `401 Unauthorized`, `403 Forbidden` (only admin), `422 Unprocessable Entity`, `500 Internal Server Error`
+
+---
+
 ## Database Tables
 
-- Table `users`: Contains `id`, `username`, `password_hash`, `salt`, `score`, `totp_secret`, `lastTotpStep`
+- Table `users`: Contains `id`, `username`, `password_hash`, `salt`, `score`, `totp_secret`, `lastTotpStep`, `role`
 - Table `facility_types`: Contains `id`, `name`
-- Table `facilities`: Contains `id`, `facility_type_id`, `name`
+- Table `facilities`: Contains `id`, `facility_type_id`, `name`, `is_maintenance`, `maintenance_reason`
 - Table `equipment_types`: Contains `id`, `name`, `total_quantity`
 - Table `facility_equipment_rules`: Contains `facility_type_id`, `equipment_type_id`, `min_quantity`
-- Table `reservations`: Contains `id`, `user_id`, `facility_id`, `booking_date`, `start_time`, `end_time` (with `UNIQUE (facility_id, booking_date, start_time)` collision prevention constraint)
+- Table `reservations`: Contains `id`, `user_id`, `facility_id`, `booking_date`, `start_time`, `end_time`
 - Table `reservation_equipment`: Contains `reservation_id`, `equipment_type_id`, `quantity`
 - Table `facility_release_logs`: Contains `id`, `user_id`, `facility_type_id`, `released_at`
 
@@ -464,23 +563,19 @@
 
 ## Main React Components
 
-- `Navigation` (in `src/components/Navigation.jsx`): Navbar featuring a "Manage My Reservations" dropdown (grouping Public Availability, Schedule Calendar, and My Reservations), "+ New Reservation" link, user score badge, and an "Account Settings" dropdown menu containing actions for 2FA authentication, password change, and logout
-- `PublicView` (in `src/views/PublicView.jsx`): Overview of all 6 facility types with status badges for each facility, date/time slot selectors, link to schedule calendar, plus the rental equipment table
-- `ScheduleCalendarView` (in `src/views/ScheduleCalendarView.jsx`): Interactive timeline matrix displaying court availability across 14 hourly slots (08:00–22:00) with date navigation and sport filtering; features color-coded slots (free, booked, user reservations) with one-click shortcuts to reserve or manage bookings
+- `Navigation` (in `src/components/Navigation.jsx`): Navbar featuring "Manage My Reservations" dropdown (grouping Public Availability, Schedule Calendar, My Reservations, and New Reservation), user role badge, user score badge, and "Account Settings" dropdown menu (including Admin Dashboard access for admin/staff)
+- `AdminRoute` (in `src/components/AdminRoute.jsx`): Route protection guard restricting access to `/admin` to authenticated users with `admin` or `staff` role
+- `AdminDashboardView` (in `src/views/AdminDashboardView.jsx`): Administrative operations dashboard featuring tabs for real-time analytics, facility maintenance mode toggles, equipment inventory management, and user role oversight
+- `PublicView` (in `src/views/PublicView.jsx`): Overview of all facility types with status badges (available, booked, maintenance), date/time slot selectors, link to schedule calendar, and rental equipment table
+- `ScheduleCalendarView` (in `src/views/ScheduleCalendarView.jsx`): Interactive timeline matrix displaying court availability across 14 hourly slots (08:00-22:00) with sport filtering, maintenance indicators, color-coded slots, and direct booking shortcuts
 - `LoginView` (in `src/views/LoginView.jsx`): User credentials authentication form with password visibility toggle
 - `RegisterView` (in `src/views/RegisterView.jsx`): New user registration form with validation, password confirmation, and error handling
 - `ChangePasswordView` (in `src/views/ChangePasswordView.jsx`): Account password update form with current password verification and confirmation checks
 - `TotpView` (in `src/views/TotpView.jsx`): 2-Factor Authentication screen for TOTP validation with score reset explanation
 - `MyReservationsView` (in `src/views/MyReservationsView.jsx`): User reservations dashboard with date and hourly slot badges, equipment details, edit equipment modal trigger, and cancellation confirmation dialog with score warnings
-- `NewReservationView` (in `src/views/NewReservationView.jsx`): Multi-step booking creation interface supporting date selection (up to 14 days in advance), hourly time slot selection, manual or automatic facility selection, dynamic equipment inventory validation, mandatory equipment locking, and score restrictions
+- `NewReservationView` (in `src/views/NewReservationView.jsx`): Multi-step booking creation interface supporting date selection (up to 14 days in advance), hourly time slot selection, manual or automatic facility selection (filtering out maintenance courts), dynamic equipment inventory validation, mandatory equipment locking, and score restrictions
 - `EditReservationModal` (in `src/components/EditReservationModal.jsx`): Interactive modal for adjusting equipment quantities for active bookings while enforcing mandatory minimums and slot-based stock limits
 - `ScoreBadge` (in `src/components/ScoreBadge.jsx`): Visual badge showing user score and penalty status with explanatory tooltips
-
----
-
-## Screenshot
-
-![Screenshot](./img/facility_selection_page.png)
 
 ---
 
@@ -490,9 +585,11 @@ and database state is taken to the starting one, whose users are those below.
 This is to have the application database on a well-defined and well-known
 starting status. Every other user created later will go lost
 
-|  username  |  plain-text password  |  initial_score  |   number_of_reservations  |
-|------------|-----------------------|-----------------|---------------------------|
-|   alice    |       password        |        0        |            0              |
-|   bob      |       password        |       -2        |            1              |
-|   carol    |       password        |       -1        |            1              |
-|   dave     |       password        |        0        |            2              |
+|  username  |  plain-text password  |      role       |  initial_score  |   number_of_reservations  |
+|------------|-----------------------|-----------------|-----------------|---------------------------|
+|   alice    |       password        |      admin      |        0        |            0              |
+|   bob      |       password        |      user       |       -2        |            1              |
+|   carol    |       password        |      user       |       -1        |            1              |
+|   dave     |       password        |      user       |        0        |            2              |
+|   admin    |       password        |      admin      |        0        |            0              |
+|   staff    |       password        |      staff      |        0        |            0              |

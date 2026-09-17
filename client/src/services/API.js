@@ -181,6 +181,71 @@ const changePassword = async ({ oldPassword, newPassword }) => {
   );
 };
 
+const getAdminAnalytics = async () => {
+  return getJson(
+    fetch(SERVER_URL + 'admin/analytics', {
+      credentials: 'include'
+    })
+  );
+};
+
+const getAdminFacilities = async () => {
+  return getJson(
+    fetch(SERVER_URL + 'admin/facilities', {
+      credentials: 'include'
+    })
+  );
+};
+
+const toggleFacilityMaintenance = async (facilityId, isMaintenance, maintenanceReason = '') => {
+  return getJson(
+    fetch(SERVER_URL + `admin/facilities/${facilityId}/maintenance`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ isMaintenance, maintenanceReason })
+    })
+  );
+};
+
+const getAdminEquipment = async () => {
+  return getJson(
+    fetch(SERVER_URL + 'admin/equipment', {
+      credentials: 'include'
+    })
+  );
+};
+
+const updateEquipmentStock = async (equipmentTypeId, totalQuantity) => {
+  return getJson(
+    fetch(SERVER_URL + `admin/equipment/${equipmentTypeId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ totalQuantity })
+    })
+  );
+};
+
+const getAdminUsers = async () => {
+  return getJson(
+    fetch(SERVER_URL + 'admin/users', {
+      credentials: 'include'
+    })
+  );
+};
+
+const updateUserRole = async (userId, role) => {
+  return getJson(
+    fetch(SERVER_URL + `admin/users/${userId}/role`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ role })
+    })
+  );
+};
+
 const API = {
   getPublicAvailability,
   getScheduleCalendar,
@@ -196,7 +261,14 @@ const API = {
   changePassword,
   totpVerify,
   getUserInfo,
-  logOut
+  logOut,
+  getAdminAnalytics,
+  getAdminFacilities,
+  toggleFacilityMaintenance,
+  getAdminEquipment,
+  updateEquipmentStock,
+  getAdminUsers,
+  updateUserRole
 };
 
 export default API;

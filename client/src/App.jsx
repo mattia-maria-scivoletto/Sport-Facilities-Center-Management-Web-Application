@@ -11,6 +11,8 @@ import NewReservationView from './views/NewReservationView';
 import RegisterView from './views/RegisterView';
 import ChangePasswordView from './views/ChangePasswordView';
 import ScheduleCalendarView from './views/ScheduleCalendarView';
+import AdminDashboardView from './views/AdminDashboardView';
+import AdminRoute from './components/AdminRoute';
 
 import API from './services/API';
 import './App.css';
@@ -169,6 +171,16 @@ function App() {
                 ) : (
                   <Navigate to="/login" replace />
                 )
+              }
+            />
+
+            {/* admin dashboard route */}
+            <Route
+              path="/admin"
+              element={
+                <AdminRoute user={user} loggedIn={loggedIn}>
+                  <AdminDashboardView user={user} />
+                </AdminRoute>
               }
             />
 
