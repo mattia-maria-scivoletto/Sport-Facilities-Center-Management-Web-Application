@@ -1,13 +1,15 @@
 import db from './db.mjs';
 
-// get all reservations for a given user
-// including structured equipment lists
+// get all reservations for a given user including date, time slots, and equipment
 const getUserReservations = (userId) => {
   return new Promise((resolve, reject) => {
     const sqlReservations = `
       SELECT 
         r.id AS reservationId,
         r.facility_id AS facilityId,
+        r.booking_date AS bookingDate,
+        r.start_time AS startTime,
+        r.end_time AS endTime,
         f.name AS facilityName,
         f.facility_type_id AS facilityTypeId,
         ft.name AS typeName
@@ -15,7 +17,7 @@ const getUserReservations = (userId) => {
       JOIN facilities f ON f.id = r.facility_id
       JOIN facility_types ft ON ft.id = f.facility_type_id
       WHERE r.user_id = ?
-      ORDER BY r.id DESC;
+      ORDER BY r.booking_date DESC, r.start_time DESC, r.id DESC;
     `;
 
     const sqlEquipments = `
@@ -64,8 +66,7 @@ const getUserReservations = (userId) => {
   });
 };
 
-// check if user is in 30-second cooldown
-// window for a facility type
+// check if user is in 30-second cooldown window for a facility type
 const checkCooldownConstraint = (userId, facilityTypeId) => {
   return new Promise((resolve, reject) => {
     const sql = `SELECT released_at,
@@ -88,8 +89,7 @@ const checkCooldownConstraint = (userId, facilityTypeId) => {
   });
 };
 
-// record or update timestamp when
-// a user cancels a reservation
+// record or update timestamp when a user cancels a reservation
 const recordCooldownTimestamp = (userId, facilityTypeId) => {
   return new Promise((resolve, reject) => {
     const sql = `INSERT INTO facility_release_logs (user_id, facility_type_id, released_at)
@@ -103,12 +103,29 @@ const recordCooldownTimestamp = (userId, facilityTypeId) => {
   });
 };
 
-// create a new reservation and all associated equipment entries
-const createReservation = (userId, facilityId, equipments) => {
+// check court collision for date and time slot
+const checkCourtCollision = (facilityId, bookingDate, startTime, excludeReservationId = null) => {
+  return new Promise((resolve, reject) => {
+    let sql = 'SELECT id FROM reservations WHERE facility_id = ? AND booking_date = ? AND start_time = ?';
+    const params = [facilityId, bookingDate, startTime];
+    if (excludeReservationId) {
+      sql += ' AND id != ?';
+      params.push(excludeReservationId);
+    }
+    db.get(sql, params, (err, row) => {
+      if (err) reject(err);
+      else resolve(!!row);
+    });
+  });
+};
+
+// create a new reservation with date, time slots, and equipment
+const createReservation = (userId, facilityId, bookingDate, startTime, endTime, equipments) => {
   return new Promise((resolve, reject) => {
     db.serialize(() => {
-      const sqlRes = 'INSERT INTO reservations (user_id, facility_id) VALUES (?, ?);';
-      db.run(sqlRes, [userId, facilityId], function (err) {
+      const sqlRes = `INSERT INTO reservations (user_id, facility_id, booking_date, start_time, end_time) 
+                      VALUES (?, ?, ?, ?, ?);`;
+      db.run(sqlRes, [userId, facilityId, bookingDate, startTime, endTime], function (err) {
         if (err) return reject(err);
         const reservationId = this.lastID;
 
@@ -140,16 +157,53 @@ const createReservation = (userId, facilityId, equipments) => {
   });
 };
 
-// verify reservation ownership
+// verify reservation ownership and retrieve details
 const verifyReservationOwnership = (reservationId) => {
   return new Promise((resolve, reject) => {
-    const sql = `SELECT r.id, r.user_id, r.facility_id, f.facility_type_id, f.name AS facilityName
+    const sql = `SELECT r.id, r.user_id, r.facility_id, r.booking_date AS bookingDate, 
+                        r.start_time AS startTime, r.end_time AS endTime, 
+                        f.facility_type_id, f.name AS facilityName
                 FROM reservations r
                 JOIN facilities f ON f.id = r.facility_id
                 WHERE r.id = ?;`;
     db.get(sql, [reservationId], (err, row) => {
       if (err) reject(err);
       else resolve(row || null);
+    });
+  });
+};
+
+// get schedule matrix for interactive calendar
+const getScheduleMatrix = (startDate, endDate, facilityTypeId) => {
+  return new Promise((resolve, reject) => {
+    let sql = `
+      SELECT 
+        r.id AS reservationId,
+        r.user_id AS userId,
+        r.facility_id AS facilityId,
+        r.booking_date AS bookingDate,
+        r.start_time AS startTime,
+        r.end_time AS endTime,
+        f.name AS facilityName,
+        f.facility_type_id AS facilityTypeId,
+        ft.name AS typeName,
+        u.username AS bookedByUsername
+      FROM reservations r
+      JOIN facilities f ON f.id = r.facility_id
+      JOIN facility_types ft ON ft.id = f.facility_type_id
+      JOIN users u ON u.id = r.user_id
+      WHERE r.booking_date >= ? AND r.booking_date <= ?
+    `;
+    const params = [startDate, endDate];
+    if (facilityTypeId) {
+      sql += ' AND f.facility_type_id = ?';
+      params.push(facilityTypeId);
+    }
+    sql += ' ORDER BY r.booking_date, r.start_time, f.id;';
+
+    db.all(sql, params, (err, rows) => {
+      if (err) reject(err);
+      else resolve(rows || []);
     });
   });
 };
@@ -218,8 +272,10 @@ export default {
   getUserReservations,
   checkCooldownConstraint,
   recordCooldownTimestamp,
+  checkCourtCollision,
   createReservation,
   verifyReservationOwnership,
+  getScheduleMatrix,
   getReservedEquipmentsbyReservation,
   updateReservationEquipments,
   deleteReservationAndRelatedEquipments,

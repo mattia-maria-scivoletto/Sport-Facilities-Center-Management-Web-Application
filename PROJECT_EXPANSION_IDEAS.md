@@ -22,19 +22,23 @@ The application currently features:
 
 ## 💡 Proposed Feature Expansions
 
-### 1. 📅 Time-Slot Scheduling & Interactive Calendar
-Currently, reservations operate on real-time current availability. Expanding into time-based bookings turns the service into a full-fledged booking platform.
+### 1. 📅 Time-Slot Scheduling & Interactive Calendar — ✅ *Implemented*
+Transformed the service from static real-time availability into a full-fledged time-slot booking platform with interactive visual matrix navigation and robust collision prevention.
 
-* **Hourly Time Slots:**
-  - Introduce selectable booking dates and time intervals (e.g. 1-hour slots from `08:00` to `22:00`).
-  - Booking in advance (e.g. up to 7 or 14 days ahead).
+* **Hourly Time Slots (08:00 – 22:00):**
+  - Selectable booking dates (from today up to 14 days in advance) and 14 hourly slots (`08:00–09:00` to `21:00–22:00`).
+  - Integrated into Step 1 of the reservation wizard and public availability views.
 * **Collision Detection Engine:**
-  - Database schema expansion: add `booking_date`, `start_time`, `end_time` to `reservations`.
-  - Validate court availability per specific time window.
-  - Dynamically recalculate equipment inventory for overlapping slots.
-* **Interactive Calendar UI:**
-  - Integrate [FullCalendar](https://fullcalendar.io/) or [React-Big-Calendar](https://github.com/jquense/react-big-calendar).
-  - Day, week, and month visual timeline view with color-coded slots (green = free, red = booked, yellow = my bookings).
+  - Database schema expansion: added `booking_date`, `start_time`, `end_time` columns to table `reservations` with strict `UNIQUE (facility_id, booking_date, start_time)` constraint.
+  - Back-end DAO validation preventing double-booking of any facility court or pitch in overlapping slots (`409 Conflict`).
+  - Dynamic equipment stock calculation: rented equipment inventory is calculated strictly relative to active bookings in the selected date & time window.
+* **Interactive Calendar UI (`/calendar`):**
+  - Visual matrix timeline displaying all sports courts across all 14 hourly time slots for any selected date.
+  - Color-coded slots:
+    - 🟢 **Green (Free):** Clickable button to immediately jump to reservation prefilled with court, date, and slot.
+    - 🔴 **Red (Booked):** Disabled badge displaying booking owner name.
+    - 🟡 **Yellow (My Booking):** Highlights authenticated user's own reservations with direct link to manage.
+  - Date navigation toolbar (Previous Day, Next Day, Today, Date Picker) and instant sport discipline filter.
 
 ---
 

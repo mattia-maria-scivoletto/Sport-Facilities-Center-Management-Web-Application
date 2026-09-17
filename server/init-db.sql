@@ -110,18 +110,26 @@ INSERT INTO facility_equipment_rules VALUES('CYCLING','REPAIR_KIT',0);
 CREATE TABLE reservations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
-    facility_id TEXT NOT NULL UNIQUE,
+    facility_id TEXT NOT NULL,
+    booking_date TEXT NOT NULL DEFAULT (date('now')),
+    start_time TEXT NOT NULL DEFAULT '10:00',
+    end_time TEXT NOT NULL DEFAULT '11:00',
     FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
-    FOREIGN KEY (facility_id) REFERENCES facilities (id) ON DELETE RESTRICT
+    FOREIGN KEY (facility_id) REFERENCES facilities (id) ON DELETE RESTRICT,
+    UNIQUE (facility_id, booking_date, start_time)
 );
 
--- User 2 (bob): 1 reservation (B1)
-INSERT INTO reservations VALUES(1,2,'B1');
--- User 3 (carol): 1 reservation (T3)
-INSERT INTO reservations VALUES(2,3,'T3');
--- User 4 (dave): 2 reservations (V1, TT1)
-INSERT INTO reservations VALUES(3,4,'V1');
-INSERT INTO reservations VALUES(4,4,'TT1');
+-- User 2 (bob): 1 reservation (B1) at 10:00-11:00
+INSERT INTO reservations (id, user_id, facility_id, booking_date, start_time, end_time) 
+VALUES(1, 2, 'B1', date('now'), '10:00', '11:00');
+-- User 3 (carol): 1 reservation (T3) at 14:00-15:00
+INSERT INTO reservations (id, user_id, facility_id, booking_date, start_time, end_time) 
+VALUES(2, 3, 'T3', date('now'), '14:00', '15:00');
+-- User 4 (dave): 2 reservations (V1 at 16:00, TT1 at 18:00)
+INSERT INTO reservations (id, user_id, facility_id, booking_date, start_time, end_time) 
+VALUES(3, 4, 'V1', date('now'), '16:00', '17:00');
+INSERT INTO reservations (id, user_id, facility_id, booking_date, start_time, end_time) 
+VALUES(4, 4, 'TT1', date('now'), '18:00', '19:00');
 
 CREATE TABLE facility_release_logs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

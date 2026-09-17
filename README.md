@@ -7,6 +7,7 @@
 - Route `/new-reservation`: Protected booking form allowing users to select facility type, choose manual or automatic facility assignment and configure mandatory and optional equipment with available amount and user score validation
 - Route `/register`: Dedicated view to create and register a new user, with all controls to set username and password
 - Route `/change-password`: Protected view containing form to change user's password
+- Route `/calendar`: Interactive schedule calendar timeline matrix displaying court availability and reservations across hourly time slots (08:00–22:00) with sport filtering, date navigation, color coding (green = free, red = booked, yellow = my bookings), and direct slot-to-booking shortcuts
 
 ## List of HTTP API Endpoints Offered by the Backend Server
 
@@ -134,7 +135,8 @@
 
 #### Public Availability Overview
 * `GET /api/public/availability`
-* Description: Returns counts and court statuses for all facility types and rental equipment stock
+* Description: Returns counts and court statuses for all facility types and dynamic rental equipment stock. Supports optional query parameters `date` (YYYY-MM-DD, defaults to today) and `timeSlot` (HH:MM, e.g. 10:00, defaults to 10:00)
+* Query parameters: `?date=YYYY-MM-DD&timeSlot=HH:MM` (optional)
 * Request body: *None*
 * Response: `200 OK`
 ```JSON
@@ -199,7 +201,8 @@
 * Error responses: `401 Unauthorized`, `500 Internal Server Error`
 
 * `GET /api/facility-types/:typeId/rules`
-* Description: Retrieves equipment rental rules (mandatory minimums, optional items, and live inventory) for a given facility type
+* Description: Retrieves equipment rental rules (mandatory minimums, optional items, and dynamic slot-based inventory) for a given facility type
+* Query parameters: `?date=YYYY-MM-DD&timeSlot=HH:MM` (optional)
 * Request body: *None*
 * Response: `200 OK`
 ```JSON
@@ -224,8 +227,9 @@
 
 #### All Individual Facilities
 * `GET /api/facilities`
-* Description: Retrieves all individual facilities with current availability status
+* Description: Retrieves all individual facilities with availability status for a selected date and time slot
 * Authentication: Required (logged in user session)
+* Query parameters: `?date=YYYY-MM-DD&timeSlot=HH:MM` (optional, defaults to today at 10:00)
 * Request body: *None*
 * Response: `200 OK`
 ```JSON
@@ -297,6 +301,54 @@
 ```
 * Error responses: `401 Unauthorized`, `500 Internal Server Error`
 
+#### Interactive Schedule Calendar Matrix
+* `GET /api/schedule/calendar`
+* Description: Returns full schedule matrix including all facilities, facility types, and booked reservations with ownership flag (`isMine`) for visual calendar/timeline representation
+* Authentication: Optional (publicly viewable; `isMine` evaluates to `true` for reservations belonging to the authenticated user)
+* Query parameters:
+  - `startDate` (YYYY-MM-DD, optional, defaults to today)
+  - `endDate` (YYYY-MM-DD, optional, defaults to 6 days after startDate)
+  - `facilityTypeId` (string, optional filter by sport discipline)
+* Request body: *None*
+* Response: `200 OK`
+```JSON
+{
+  "startDate": "2026-09-16",
+  "endDate": "2026-09-22",
+  "facilities": [
+    {
+      "id": "B1",
+      "facilityTypeId": "BASKETBALL",
+      "name": "Basketball Court #1",
+      "typeName": "Basketball Court",
+      "isAvailable": 0
+    }
+  ],
+  "facilityTypes": [
+    {
+      "id": "BASKETBALL",
+      "name": "Basketball Court"
+    }
+  ],
+  "reservations": [
+    {
+      "reservationId": 1,
+      "userId": 2,
+      "facilityId": "B1",
+      "bookingDate": "2026-09-16",
+      "startTime": "10:00",
+      "endTime": "11:00",
+      "facilityName": "Basketball Court #1",
+      "facilityTypeId": "BASKETBALL",
+      "typeName": "Basketball Court",
+      "bookedByUsername": "bob",
+      "isMine": true
+    }
+  ]
+}
+```
+* Error responses: `500 Internal Server Error`
+
 ---
 
 ### Reservations Management
@@ -330,13 +382,16 @@
 
 #### Create a New Reservation
 * `POST /api/reservations`
-* Description: Creates a facility reservation with required equipment. Enforces 30s cooldown, mandatory minimums, inventory availability, and negative score restrictions
+* Description: Creates a facility reservation with required equipment for a specific date and time slot. Enforces court collision prevention, 30s cooldown, mandatory minimums, slot-based inventory availability, and negative score restrictions
 * Request body:
 ```JSON
 {
   "facilityTypeId": "TENNIS",
   "facilityId": "T1",
   "automaticFacilitySelection": 0,
+  "bookingDate": "2026-09-17",
+  "startTime": "14:00",
+  "endTime": "15:00",
   "equipments": [
     { "equipmentTypeId": "TENNIS_RACKET", "quantity": 2 },
     { "equipmentTypeId": "TENNIS_BALL", "quantity": 3 },
@@ -350,10 +405,13 @@
   "message": "Facility and equipment reserved successfully!",
   "reservationId": 5,
   "facilityId": "T1",
-  "facilityName": "Tennis Court #1"
+  "facilityName": "Tennis Court #1",
+  "bookingDate": "2026-09-17",
+  "startTime": "14:00",
+  "endTime": "15:00"
 }
 ```
-* Error responses: `401 Unauthorized`, `403 Forbidden` (score violation or 30 seconds cooldown active), `422 Unprocessable Content` (missing mandatory equipment or insufficient stock), `500 Internal Server Error`
+* Error responses: `401 Unauthorized`, `403 Forbidden` (score violation or 30 seconds cooldown active), `409 Conflict` / `422 Unprocessable Content` (facility double-booking collision, missing mandatory equipment, or insufficient stock), `500 Internal Server Error`
 
 #### Edit Equipment Quantities For an Existing Reservation
 * `PUT /api/reservations/:reservationId/equipment`
@@ -398,7 +456,7 @@
 - Table `facilities`: Contains `id`, `facility_type_id`, `name`
 - Table `equipment_types`: Contains `id`, `name`, `total_quantity`
 - Table `facility_equipment_rules`: Contains `facility_type_id`, `equipment_type_id`, `min_quantity`
-- Table `reservations`: Contains `id`, `user_id`, `facility_id`
+- Table `reservations`: Contains `id`, `user_id`, `facility_id`, `booking_date`, `start_time`, `end_time` (with `UNIQUE (facility_id, booking_date, start_time)` collision prevention constraint)
 - Table `reservation_equipment`: Contains `reservation_id`, `equipment_type_id`, `quantity`
 - Table `facility_release_logs`: Contains `id`, `user_id`, `facility_type_id`, `released_at`
 
@@ -406,15 +464,16 @@
 
 ## Main React Components
 
-- `Navigation` (in `src/components/Navigation.jsx`): Navbar displaying application sections, score badge, and an Account dropdown menu containing actions for 2FA authentication, password change, and logout
-- `PublicView` (in `src/views/PublicView.jsx`): Overview of all 6 facility types with status badges for each facility, plus the rental equipment table
+- `Navigation` (in `src/components/Navigation.jsx`): Navbar featuring a "Manage My Reservations" dropdown (grouping Public Availability, Schedule Calendar, and My Reservations), "+ New Reservation" link, user score badge, and an "Account Settings" dropdown menu containing actions for 2FA authentication, password change, and logout
+- `PublicView` (in `src/views/PublicView.jsx`): Overview of all 6 facility types with status badges for each facility, date/time slot selectors, link to schedule calendar, plus the rental equipment table
+- `ScheduleCalendarView` (in `src/views/ScheduleCalendarView.jsx`): Interactive timeline matrix displaying court availability across 14 hourly slots (08:00–22:00) with date navigation and sport filtering; features color-coded slots (free, booked, user reservations) with one-click shortcuts to reserve or manage bookings
 - `LoginView` (in `src/views/LoginView.jsx`): User credentials authentication form with password visibility toggle
 - `RegisterView` (in `src/views/RegisterView.jsx`): New user registration form with validation, password confirmation, and error handling
 - `ChangePasswordView` (in `src/views/ChangePasswordView.jsx`): Account password update form with current password verification and confirmation checks
 - `TotpView` (in `src/views/TotpView.jsx`): 2-Factor Authentication screen for TOTP validation with score reset explanation
-- `MyReservationsView` (in `src/views/MyReservationsView.jsx`): User reservations dashboard with equipment details, edit equipment modal trigger, and cancellation confirmation dialog with score warnings
-- `NewReservationView` (in `src/views/NewReservationView.jsx`): 2 step booking creation interface supporting manual or automatic facility selection, mandatory equipment locking, and score restrictions
-- `EditReservationModal` (in `src/components/EditReservationModal.jsx`): Interactive modal for adjusting equipment quantities for active bookings while enforcing mandatory minimums and stock limits
+- `MyReservationsView` (in `src/views/MyReservationsView.jsx`): User reservations dashboard with date and hourly slot badges, equipment details, edit equipment modal trigger, and cancellation confirmation dialog with score warnings
+- `NewReservationView` (in `src/views/NewReservationView.jsx`): Multi-step booking creation interface supporting date selection (up to 14 days in advance), hourly time slot selection, manual or automatic facility selection, dynamic equipment inventory validation, mandatory equipment locking, and score restrictions
+- `EditReservationModal` (in `src/components/EditReservationModal.jsx`): Interactive modal for adjusting equipment quantities for active bookings while enforcing mandatory minimums and slot-based stock limits
 - `ScoreBadge` (in `src/components/ScoreBadge.jsx`): Visual badge showing user score and penalty status with explanatory tooltips
 
 ---

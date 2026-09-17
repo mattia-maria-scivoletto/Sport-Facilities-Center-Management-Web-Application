@@ -1,7 +1,13 @@
 import db from './db.mjs';
 
-// get public overview of facilities and equipment
-const getPublicAvailability = () => {
+const resolveDate = (date) => date || new Date().toISOString().split('T')[0];
+const resolveTime = (time) => time || '10:00';
+
+// get public overview of facilities and equipment for a given date and time slot
+const getPublicAvailability = (bookingDate, startTime) => {
+  const date = resolveDate(bookingDate);
+  const time = resolveTime(startTime);
+
   return new Promise((resolve, reject) => {
     const sqlFacilities = `
       SELECT 
@@ -11,7 +17,7 @@ const getPublicAvailability = () => {
         CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END AS isBooked
       FROM facilities f
       JOIN facility_types ft ON f.facility_type_id = ft.id
-      LEFT JOIN reservations r ON r.facility_id = f.id
+      LEFT JOIN reservations r ON r.facility_id = f.id AND r.booking_date = ? AND r.start_time = ?
       ORDER BY f.facility_type_id, f.id;
     `;
 
@@ -22,15 +28,20 @@ const getPublicAvailability = () => {
         eq.total_quantity AS totalQuantity,
         eq.total_quantity - COALESCE(SUM(re.quantity), 0) AS availableQuantity
       FROM equipment_types eq
-      LEFT JOIN reservation_equipment re ON re.equipment_type_id = eq.id
+      LEFT JOIN (
+        SELECT re.equipment_type_id, re.quantity
+        FROM reservation_equipment re
+        JOIN reservations r ON r.id = re.reservation_id
+        WHERE r.booking_date = ? AND r.start_time = ?
+      ) re ON re.equipment_type_id = eq.id
       GROUP BY eq.id, eq.name, eq.total_quantity
       ORDER BY eq.id;
     `;
 
-    db.all(sqlFacilities, [], (err, facilityRows) => {
+    db.all(sqlFacilities, [date, time], (err, facilityRows) => {
       if (err) return reject(err);
 
-      db.all(sqlEquipment, [], (err2, equipmentRows) => {
+      db.all(sqlEquipment, [date, time], (err2, equipmentRows) => {
         if (err2) return reject(err2);
 
         const facilitiesMap = new Map();
@@ -58,6 +69,8 @@ const getPublicAvailability = () => {
 
         const facilities = Array.from(facilitiesMap.values());
         resolve({
+          selectedDate: date,
+          selectedTimeSlot: time,
           facilities,
           equipment: equipmentRows
         });
@@ -66,8 +79,11 @@ const getPublicAvailability = () => {
   });
 };
 
-// get list of all individual facilities with booking status
-const getAllFacilities = () => {
+// get list of all individual facilities with booking status for a date and time slot
+const getAllFacilities = (bookingDate, startTime) => {
+  const date = resolveDate(bookingDate);
+  const time = resolveTime(startTime);
+
   return new Promise((resolve, reject) => {
     const sql = `
       SELECT 
@@ -78,10 +94,10 @@ const getAllFacilities = () => {
         CASE WHEN r.id IS NOT NULL THEN 0 ELSE 1 END AS isAvailable
       FROM facilities f
       JOIN facility_types ft ON f.facility_type_id = ft.id
-      LEFT JOIN reservations r ON r.facility_id = f.id
+      LEFT JOIN reservations r ON r.facility_id = f.id AND r.booking_date = ? AND r.start_time = ?
       ORDER BY f.facility_type_id, f.id;
     `;
-    db.all(sql, [], (err, rows) => {
+    db.all(sql, [date, time], (err, rows) => {
       if (err) reject(err);
       else resolve(rows);
     });
@@ -99,8 +115,11 @@ const getAllFacilityTypes = () => {
   });
 };
 
-// get equipment rules and current stock for a facility type
-const getFacilityEquipmentRules = (facilityTypeId) => {
+// get equipment rules and current stock for a facility type and slot
+const getFacilityEquipmentRules = (facilityTypeId, bookingDate, startTime, excludeReservationId = null) => {
+  const date = resolveDate(bookingDate);
+  const time = resolveTime(startTime);
+
   return new Promise((resolve, reject) => {
     const sql = `
       SELECT 
@@ -111,39 +130,61 @@ const getFacilityEquipmentRules = (facilityTypeId) => {
         eq.total_quantity - COALESCE(SUM(re.quantity), 0) AS availableQuantity
       FROM facility_equipment_rules fer
       JOIN equipment_types eq ON eq.id = fer.equipment_type_id
-      LEFT JOIN reservation_equipment re ON re.equipment_type_id = eq.id
+      LEFT JOIN (
+        SELECT re.equipment_type_id, re.quantity
+        FROM reservation_equipment re
+        JOIN reservations r ON r.id = re.reservation_id
+        WHERE r.booking_date = ? AND r.start_time = ?
+        ${excludeReservationId ? 'AND r.id != ?' : ''}
+      ) re ON re.equipment_type_id = eq.id
       WHERE fer.facility_type_id = ?
       GROUP BY fer.equipment_type_id, eq.name, fer.min_quantity, eq.total_quantity
       ORDER BY fer.min_quantity DESC, eq.name;
     `;
-    db.all(sql, [facilityTypeId], (err, rows) => {
+    const params = excludeReservationId
+      ? [date, time, excludeReservationId, facilityTypeId]
+      : [date, time, facilityTypeId];
+
+    db.all(sql, params, (err, rows) => {
       if (err) reject(err);
       else resolve(rows);
     });
   });
 };
 
-// get available facility for manual selection
-const getFacilityManualSelection = (facilityId) => {
+// get available facility for manual selection in a date and slot
+const getFacilityManualSelection = (facilityId, bookingDate, startTime) => {
+  const date = resolveDate(bookingDate);
+  const time = resolveTime(startTime);
+
   return new Promise((resolve, reject) => {
     const sql = `SELECT id, facility_type_id AS facilityTypeId, name FROM facilities 
                 WHERE id = ? 
-                AND id NOT IN (SELECT facility_id FROM reservations);`;
-    db.get(sql, [facilityId], (err, row) => {
+                AND id NOT IN (
+                  SELECT facility_id FROM reservations 
+                  WHERE booking_date = ? AND start_time = ?
+                );`;
+    db.get(sql, [facilityId, date, time], (err, row) => {
       if (err) reject(err);
       else resolve(row);
     });
   });
 };
 
-// get first available facility for automatic selection
-const getFacilityAutomaticSelection = (facilityType) => {
+// get first available facility for automatic selection in a date and slot
+const getFacilityAutomaticSelection = (facilityType, bookingDate, startTime) => {
+  const date = resolveDate(bookingDate);
+  const time = resolveTime(startTime);
+
   return new Promise((resolve, reject) => {
     const sql = `SELECT id, facility_type_id AS facilityTypeId, name FROM facilities 
                 WHERE facility_type_id = ? 
-                AND id NOT IN (SELECT facility_id FROM reservations)
+                AND id NOT IN (
+                  SELECT facility_id FROM reservations 
+                  WHERE booking_date = ? AND start_time = ?
+                )
                 LIMIT 1;`;
-    db.get(sql, [facilityType], (err, row) => {
+    db.get(sql, [facilityType, date, time], (err, row) => {
       if (err) reject(err);
       else resolve(row);
     });

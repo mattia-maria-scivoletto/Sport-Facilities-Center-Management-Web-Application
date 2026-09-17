@@ -10,6 +10,7 @@ import MyReservationsView from './views/MyReservationsView';
 import NewReservationView from './views/NewReservationView';
 import RegisterView from './views/RegisterView';
 import ChangePasswordView from './views/ChangePasswordView';
+import ScheduleCalendarView from './views/ScheduleCalendarView';
 
 import API from './services/API';
 import './App.css';
@@ -88,6 +89,9 @@ function App() {
           <Routes>
             {/* public availability route */}
             <Route path="/" element={<PublicView loggedIn={loggedIn} />} />
+
+            {/* schedule calendar route */}
+            <Route path="/calendar" element={<ScheduleCalendarView loggedIn={loggedIn} />} />
 
             {/* login route */}
             <Route

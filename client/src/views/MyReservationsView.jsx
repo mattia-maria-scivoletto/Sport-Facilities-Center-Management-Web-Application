@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Container, Row, Col, Card, Button, Badge, Spinner, Alert, Modal } from 'react-bootstrap';
 import { Link } from 'react-router-dom';
+import dayjs from 'dayjs';
 import API from '../services/API';
 import EditReservationModal from '../components/EditReservationModal';
 
@@ -108,7 +109,10 @@ function MyReservationsView({ user, setUser, setFeedback }) {
             Manage your booked facilities and adjust rental sports equipment
           </p>
         </div>
-        <div>
+        <div className="d-flex gap-2">
+          <Button as={Link} to="/calendar" variant="outline-primary" className="fw-semibold">
+            <i className="bi bi-calendar3 me-1"></i> Schedule Calendar
+          </Button>
           <Button as={Link} to="/new-reservation" variant="primary" className="fw-semibold">
             + Book Another Facility
           </Button>
@@ -154,6 +158,18 @@ function MyReservationsView({ user, setUser, setFeedback }) {
                   </Card.Header>
 
                   <Card.Body>
+                    {/* Time & Date Slot Badge */}
+                    <div className="mb-3 d-flex flex-wrap gap-2 align-items-center">
+                      <Badge bg="info" text="dark" className="px-2 py-1 fs-6">
+                        <i className="bi bi-calendar-event me-1"></i>
+                        {r.bookingDate ? dayjs(r.bookingDate).format('ddd, D MMM YYYY') : 'Today'}
+                      </Badge>
+                      <Badge bg="dark" className="px-2 py-1 fs-6">
+                        <i className="bi bi-clock me-1"></i>
+                        {r.startTime || '10:00'} - {r.endTime || '11:00'}
+                      </Badge>
+                    </div>
+
                     <div className="mb-3">
                       <span className="text-muted small">Facility Type: </span>
                       <strong>{r.typeName}</strong>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Navbar, Nav, Container, Button, Dropdown } from 'react-bootstrap';
+import { Navbar, Nav, Container, Button, Dropdown, NavDropdown } from 'react-bootstrap';
 import { Link, useNavigate } from 'react-router-dom';
 import ScoreBadge from './ScoreBadge';
 
@@ -17,18 +17,21 @@ function Navigation({ user, loggedIn, logout }) {
 
         <Navbar.Collapse id="sports-navbar-nav">
           <Nav className="me-auto">
-            <Nav.Link as={Link} to="/">
-              Public Availability
-            </Nav.Link>
+            <NavDropdown title="Manage My Reservations" id="manage-reservations-dropdown">
+              <NavDropdown.Item as={Link} to="/">
+                <i className="bi bi-grid-fill me-2"></i> Public Availability
+              </NavDropdown.Item>
+              <NavDropdown.Item as={Link} to="/calendar">
+                <i className="bi bi-calendar3 me-2"></i> Schedule Calendar
+              </NavDropdown.Item>
+              <NavDropdown.Item as={Link} to="/reservations">
+                <i className="bi bi-calendar-check me-2"></i> My Reservations
+              </NavDropdown.Item>
+            </NavDropdown>
             {loggedIn && (
-              <>
-                <Nav.Link as={Link} to="/reservations">
-                  My Reservations
-                </Nav.Link>
-                <Nav.Link as={Link} to="/new-reservation" className="text-warning fw-semibold">
-                  + New Reservation
-                </Nav.Link>
-              </>
+              <Nav.Link as={Link} to="/new-reservation" className="text-warning fw-semibold">
+                + New Reservation
+              </Nav.Link>
             )}
           </Nav>
 
@@ -42,7 +45,7 @@ function Navigation({ user, loggedIn, logout }) {
 
                 <Dropdown align="end">
                   <Dropdown.Toggle variant="outline-light" size="sm" id="user-menu-dropdown">
-                    <i className="bi bi-gear me-1"></i> Account
+                    <i className="bi bi-gear me-1"></i> Account Settings
                   </Dropdown.Toggle>
 
                   <Dropdown.Menu>

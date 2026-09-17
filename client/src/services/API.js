@@ -20,9 +20,26 @@ function getJson(httpResponsePromise) {
   });
 }
 
-const getPublicAvailability = async () => {
+const getPublicAvailability = async (date, timeSlot) => {
+  const params = new URLSearchParams();
+  if (date) params.append('date', date);
+  if (timeSlot) params.append('timeSlot', timeSlot);
+  const query = params.toString() ? `?${params.toString()}` : '';
   return getJson(
-    fetch(SERVER_URL + 'public/availability', {
+    fetch(SERVER_URL + 'public/availability' + query, {
+      credentials: 'include'
+    })
+  );
+};
+
+const getScheduleCalendar = async ({ startDate, endDate, facilityTypeId } = {}) => {
+  const params = new URLSearchParams();
+  if (startDate) params.append('startDate', startDate);
+  if (endDate) params.append('endDate', endDate);
+  if (facilityTypeId) params.append('facilityTypeId', facilityTypeId);
+  const query = params.toString() ? `?${params.toString()}` : '';
+  return getJson(
+    fetch(SERVER_URL + 'schedule/calendar' + query, {
       credentials: 'include'
     })
   );
@@ -36,17 +53,25 @@ const getFacilityTypes = async () => {
   );
 };
 
-const getAllFacilities = async () => {
+const getAllFacilities = async (date, timeSlot) => {
+  const params = new URLSearchParams();
+  if (date) params.append('date', date);
+  if (timeSlot) params.append('timeSlot', timeSlot);
+  const query = params.toString() ? `?${params.toString()}` : '';
   return getJson(
-    fetch(SERVER_URL + 'facilities', {
+    fetch(SERVER_URL + 'facilities' + query, {
       credentials: 'include'
     })
   );
 };
 
-const getFacilityRules = async (facilityTypeId) => {
+const getFacilityRules = async (facilityTypeId, date, timeSlot) => {
+  const params = new URLSearchParams();
+  if (date) params.append('date', date);
+  if (timeSlot) params.append('timeSlot', timeSlot);
+  const query = params.toString() ? `?${params.toString()}` : '';
   return getJson(
-    fetch(SERVER_URL + `facility-types/${facilityTypeId}/rules`, {
+    fetch(SERVER_URL + `facility-types/${facilityTypeId}/rules${query}`, {
       credentials: 'include'
     })
   );
@@ -158,6 +183,7 @@ const changePassword = async ({ oldPassword, newPassword }) => {
 
 const API = {
   getPublicAvailability,
+  getScheduleCalendar,
   getFacilityTypes,
   getAllFacilities,
   getFacilityRules,

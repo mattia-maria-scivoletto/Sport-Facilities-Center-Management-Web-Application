@@ -118,11 +118,48 @@ async function formatClientUserInfo(req) {
 // GET /api/public/availability
 app.get('/api/public/availability', async (req, res) => {
   try {
-    const data = await daoFacilities.getPublicAvailability();
+    const { date, timeSlot } = req.query;
+    const data = await daoFacilities.getPublicAvailability(date, timeSlot);
     res.status(200).json(data);
   } catch (err) {
     console.error('Error in /api/public/availability:', err);
     res.status(500).json({ error: 'Internal server error while fetching availability' });
+  }
+});
+
+// GET /api/schedule/calendar
+// Get schedule matrix for interactive calendar / timeline
+app.get('/api/schedule/calendar', async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const startDate = req.query.startDate || today;
+    const defaultEnd = new Date(new Date(startDate).getTime() + 6 * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split('T')[0];
+    const endDate = req.query.endDate || defaultEnd;
+    const facilityTypeId = req.query.facilityTypeId || null;
+
+    const currentUserId = req.isAuthenticated() ? req.user.id : null;
+
+    const rawReservations = await daoReservations.getScheduleMatrix(startDate, endDate, facilityTypeId);
+    const facilities = await daoFacilities.getAllFacilities();
+    const facilityTypes = await daoFacilities.getAllFacilityTypes();
+
+    const reservations = rawReservations.map((r) => ({
+      ...r,
+      isMine: currentUserId !== null && r.userId === currentUserId
+    }));
+
+    return res.status(200).json({
+      startDate,
+      endDate,
+      facilities,
+      facilityTypes,
+      reservations
+    });
+  } catch (err) {
+    console.error('Error fetching calendar schedule:', err);
+    return res.status(500).json({ error: 'Internal server error while fetching calendar schedule' });
   }
 });
 
@@ -140,7 +177,8 @@ app.get('/api/facility-types', isLoggedIn, async (req, res) => {
 // GET /api/facilities
 app.get('/api/facilities', isLoggedIn, async (req, res) => {
   try {
-    const facilities = await daoFacilities.getAllFacilities();
+    const { date, timeSlot } = req.query;
+    const facilities = await daoFacilities.getAllFacilities(date, timeSlot);
     res.status(200).json(facilities);
   } catch (err) {
     console.error('Error fetching facilities:', err);
@@ -166,7 +204,8 @@ app.get(
     }
 
     try {
-      const rules = await daoFacilities.getFacilityEquipmentRules(req.params.typeId);
+      const { date, timeSlot } = req.query;
+      const rules = await daoFacilities.getFacilityEquipmentRules(req.params.typeId, date, timeSlot);
       res.status(200).json(rules);
     } catch (err) {
       console.error('Error fetching facility rules:', err);
@@ -390,7 +429,24 @@ app.post(
       return res.status(422).json({ error: errors.array().join(', ') });
     }
 
-    const { facilityTypeId, facilityId, automaticFacilitySelection, equipments } = req.body;
+    const {
+      facilityTypeId,
+      facilityId,
+      automaticFacilitySelection,
+      equipments,
+      bookingDate,
+      startTime,
+      endTime
+    } = req.body;
+
+    const resolvedDate = bookingDate || new Date().toISOString().split('T')[0];
+    const resolvedStartTime = startTime || '10:00';
+    const calcEndTime = (sTime) => {
+      const [h, m] = sTime.split(':').map(Number);
+      const endH = String(h + 1).padStart(2, '0');
+      return `${endH}:${String(m).padStart(2, '0')}`;
+    };
+    const resolvedEndTime = endTime || calcEndTime(resolvedStartTime);
 
     try {
       // check 30-second cooldown constraint for this facility type
@@ -405,8 +461,12 @@ app.post(
       const userScoreObj = await daoUsers.getUserScore(req.user.id);
       const userScore = userScoreObj.score;
 
-      // check equipment rules for facility type
-      const rules = await daoFacilities.getFacilityEquipmentRules(facilityTypeId);
+      // check equipment rules for facility type in that specific date and time slot
+      const rules = await daoFacilities.getFacilityEquipmentRules(
+        facilityTypeId,
+        resolvedDate,
+        resolvedStartTime
+      );
       if (!rules || rules.length === 0) {
         return res.status(422).json({ error: `Unknown facility type: ${facilityTypeId}` });
       }
@@ -449,12 +509,12 @@ app.post(
         }
       }
 
-      // check stock availability in sports center
+      // check stock availability in sports center for this slot
       for (const r of rules) {
         const reqQty = reqEquipmentMap.get(r.equipmentTypeId) || 0;
         if (reqQty > r.availableQuantity) {
           return res.status(422).json({
-            error: `Not enough stock: ${r.equipmentName} requested ${reqQty}, but only ${r.availableQuantity} unit(s) available.`
+            error: `Not enough stock: ${r.equipmentName} requested ${reqQty}, but only ${r.availableQuantity} unit(s) available on ${resolvedDate} at ${resolvedStartTime}.`
           });
         }
       }
@@ -468,18 +528,42 @@ app.post(
         facilityId === 'auto';
 
       if (isAuto) {
-        selectedFacility = await daoFacilities.getFacilityAutomaticSelection(facilityTypeId);
+        selectedFacility = await daoFacilities.getFacilityAutomaticSelection(
+          facilityTypeId,
+          resolvedDate,
+          resolvedStartTime
+        );
         if (!selectedFacility) {
-          return res.status(422).json({ error: `No available facilities of type ${facilityTypeId} at this time.` });
+          return res.status(422).json({
+            error: `No available facilities of type ${facilityTypeId} on ${resolvedDate} at ${resolvedStartTime}.`
+          });
         }
       } else {
-        selectedFacility = await daoFacilities.getFacilityManualSelection(facilityId);
+        selectedFacility = await daoFacilities.getFacilityManualSelection(
+          facilityId,
+          resolvedDate,
+          resolvedStartTime
+        );
         if (!selectedFacility) {
-          return res.status(422).json({ error: `Facility ${facilityId} is not available or does not exist.` });
+          return res.status(422).json({
+            error: `Facility ${facilityId} is not available on ${resolvedDate} at ${resolvedStartTime} or does not exist.`
+          });
         }
         if (selectedFacility.facilityTypeId !== facilityTypeId) {
           return res.status(422).json({ error: `Facility ${facilityId} is not of type ${facilityTypeId}.` });
         }
+      }
+
+      // Collision detection check
+      const collision = await daoReservations.checkCourtCollision(
+        selectedFacility.id,
+        resolvedDate,
+        resolvedStartTime
+      );
+      if (collision) {
+        return res.status(409).json({
+          error: `Collision detected: Facility ${selectedFacility.name} is already booked on ${resolvedDate} at ${resolvedStartTime}.`
+        });
       }
 
       // prepare final equipment list to save
@@ -492,13 +576,23 @@ app.post(
       }
 
       // create reservation
-      const result = await daoReservations.createReservation(req.user.id, selectedFacility.id, equipmentsToSave);
+      const result = await daoReservations.createReservation(
+        req.user.id,
+        selectedFacility.id,
+        resolvedDate,
+        resolvedStartTime,
+        resolvedEndTime,
+        equipmentsToSave
+      );
 
       return res.status(201).json({
         message: 'Facility and equipment reserved successfully!',
         reservationId: result.id,
         facilityId: selectedFacility.id,
-        facilityName: selectedFacility.name
+        facilityName: selectedFacility.name,
+        bookingDate: resolvedDate,
+        startTime: resolvedStartTime,
+        endTime: resolvedEndTime
       });
     } catch (err) {
       console.error('Error creating reservation:', err);
@@ -545,8 +639,13 @@ app.put(
       const userScoreObj = await daoUsers.getUserScore(req.user.id);
       const userScore = userScoreObj.score;
 
-      // fetch rules and current reservation equipment
-      const rules = await daoFacilities.getFacilityEquipmentRules(facilityTypeId);
+      // fetch rules and stock for that specific reservation's slot
+      const rules = await daoFacilities.getFacilityEquipmentRules(
+        facilityTypeId,
+        reservation.bookingDate,
+        reservation.startTime,
+        reservationId
+      );
       const currentReservedEquipments = await daoReservations.getReservedEquipmentsbyReservation(reservationId);
       const currentQtyMap = new Map();
       for (const eq of currentReservedEquipments) {
