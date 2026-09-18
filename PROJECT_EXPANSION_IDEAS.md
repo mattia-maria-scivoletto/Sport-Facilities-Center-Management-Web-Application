@@ -108,15 +108,23 @@ Bridge the digital system with physical sports center operations.
 
 ---
 
-### 6. 💰 Virtual Wallet & Gamification
+### 6. 💰 Virtual Wallet & Gamification ✅ *(Implemented)*
 Add economic dynamics and positive reinforcement incentives.
 
 * **Virtual Credits System:**
-  - Each user starts with a credit balance or can "recharge" mock credits.
-  - Court reservation fee + small rental price per equipment unit.
+  - Each user starts with a credit balance (500 mock credits) or can recharge mock credits via `/api/wallet/recharge`.
+  - Hourly court base fee (`facility_types.base_price`, e.g., Tennis 15, Soccer 20, Basketball 12, Cycling 10) + equipment rental fee per unit (`equipment_types.unit_price`, e.g., 1-5 credits/item).
+  - Dynamic pricing calculation and balance check during reservation creation, edit, and cancellation.
+  - Full transaction ledger table (`wallet_transactions`) tracking recharges, payments, adjustments, and refunds.
 * **Positive Reinforcement & Streaks:**
-  - Award bonus credits for completing bookings without cancellations (*"Reliable Player"* streak).
-  - Special badge for users maintaining a 0-penalty record over multiple weeks.
+  - Consecutive reliable booking streak tracking (`users.booking_streak`), incremented on each completed non-cancelled booking.
+  - Milestone bonuses: Every 3 consecutive bookings awards +15 bonus credits to the user's wallet!
+  - Cancellation resets booking streak to 0 while refunding reservation credits.
+  - Gamification Badges: *"Reliable Player"* (streak >= 3), *"Fair Play Champion"* (score = 0 & bookings >= 1), *"VIP Sport Enthusiast"* (100+ credits), *"Veteran Athlete"* (4+ bookings), and *"Active Member"* (1+ booking).
+* **UI Integration:**
+  - Navbar wallet credits badge (`💰 {credits} credits`) opening `WalletModal.jsx`.
+  - Comprehensive `WalletModal.jsx` with real-time balance, streak milestone progress bar, 1-click mock recharge presets, badge shelf, and detailed transaction ledger.
+  - Live pricing breakdown card in `NewReservationView.jsx` and cost delta summary in `EditReservationModal.jsx`.
 
 ---
 

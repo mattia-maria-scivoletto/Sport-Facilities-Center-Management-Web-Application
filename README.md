@@ -418,12 +418,16 @@
 ```
 * Error responses: `401 Unauthorized`, `403 Forbidden`, `409 Conflict` / `422 Unprocessable Content`, `500 Internal Server Error`
 
-#### Edit Equipment Quantities For an Existing Reservation
-* `PUT /api/reservations/:reservationId/equipment`
-* Description: Modify equipment quantities for an active reservation owned by the user
+#### Edit Reservation Schedule, Facility & Equipment
+* `PUT /api/reservations/:reservationId` (also accessible via `PUT /api/reservations/:reservationId/equipment`)
+* Description: Modify date, hourly time slot, facility assignment, and/or equipment quantities for an active reservation owned by the user. Enforces double-booking collision checks on the new slot, mandatory equipment minimums, dynamic inventory availability in the new slot, and negative score restrictions
 * Request body:
 ```JSON
 {
+  "bookingDate": "2026-09-20",
+  "startTime": "14:00",
+  "endTime": "15:00",
+  "facilityId": "T1",
   "equipments": [
     { "equipmentTypeId": "TENNIS_RACKET", "quantity": 2 },
     { "equipmentTypeId": "TENNIS_BALL", "quantity": 4 }
@@ -433,10 +437,20 @@
 * Response: `200 OK`
 ```JSON
 {
-  "message": "Reservation equipment modified successfully!"
+  "message": "Reservation updated successfully!",
+  "reservationId": 2,
+  "facilityId": "T1",
+  "facilityName": "Tennis Court #1",
+  "bookingDate": "2026-09-20",
+  "startTime": "14:00",
+  "endTime": "15:00",
+  "equipments": [
+    { "equipmentTypeId": "TENNIS_RACKET", "quantity": 2 },
+    { "equipmentTypeId": "TENNIS_BALL", "quantity": 4 }
+  ]
 }
 ```
-* Error responses: `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `422 Unprocessable Content`, `500 Internal Server Error`
+* Error responses: `401 Unauthorized`, `403 Forbidden` (non-owner or negative score violation), `404 Not Found`, `409 Conflict` (collision on new slot), `422 Unprocessable Content` (past date, maintenance court, missing mandatory equipment, or insufficient inventory), `500 Internal Server Error`
 
 #### Delete an Existing Reservation
 * `DELETE /api/reservations/:reservationId`
@@ -445,12 +459,121 @@
 * Response: `200 OK`
 ```JSON
 {
-  "message": "Reservation cancelled successfully. Your score has been reduced by 1.",
+  "message": "Reservation cancelled successfully. Refunded 25 credits to your wallet. Your score was reduced by 1 and streak was reset to 0.",
   "newScore": -3,
+  "refundAmount": 25,
+  "newWalletBalance": 500,
+  "bookingStreak": 0,
   "cooldownFacilityTypeId": "TENNIS"
 }
 ```
 * Error responses: `401 Unauthorized`, `403 Forbidden`, `404 Not Found`, `500 Internal Server Error`
+
+---
+
+### Virtual Wallet & Gamification
+
+#### Get User Wallet & Gamification Stats
+* `GET /api/wallet`
+* Description: Retrieves current credit balance, reliable player streak count, dynamic gamification badges, and recent transaction history for the authenticated user
+* Request body: *None*
+* Response: `200 OK`
+```JSON
+{
+  "walletBalance": 486,
+  "bookingStreak": 1,
+  "score": 0,
+  "totalReservations": 3,
+  "badges": [
+    {
+      "id": "reliable_player",
+      "title": "Reliable Player",
+      "icon": "🔥",
+      "unlocked": false,
+      "criteria": "Reach a streak of 3+ bookings without cancellations",
+      "progress": "1/3 bookings"
+    },
+    {
+      "id": "fair_play",
+      "title": "Fair Play Champion",
+      "icon": "🛡️",
+      "unlocked": true,
+      "criteria": "Maintain a 0 penalty score with active reservations",
+      "progress": "Flawless (score: 0)"
+    },
+    {
+      "id": "vip_enthusiast",
+      "title": "VIP Sport Enthusiast",
+      "icon": "💎",
+      "unlocked": true,
+      "criteria": "Maintain a wallet balance of 100+ credits",
+      "progress": "486/100 credits"
+    }
+  ],
+  "transactions": [
+    {
+      "id": 1,
+      "amount": -14,
+      "type": "booking_payment",
+      "description": "Booking: Basketball Court #1 (2026-09-18 10:00)",
+      "createdAt": "2026-09-18 10:15:00"
+    }
+  ]
+}
+```
+* Error responses: `401 Unauthorized`, `500 Internal Server Error`
+
+#### Recharge Mock Credits
+* `POST /api/wallet/recharge`
+* Description: Adds mock virtual credits to the authenticated user's wallet
+* Request body:
+```JSON
+{
+  "amount": 100
+}
+```
+* Response: `200 OK`
+```JSON
+{
+  "message": "Successfully recharged 100 mock credits!",
+  "amountAdded": 100,
+  "newBalance": 586
+}
+```
+* Error responses: `401 Unauthorized`, `422 Unprocessable Content` (invalid amount), `500 Internal Server Error`
+
+#### Wallet Transaction History
+* `GET /api/wallet/transactions`
+* Description: Returns full chronological transaction history for the authenticated user
+* Response: `200 OK`
+
+#### Calculate Booking Cost Preview
+* `POST /api/wallet/calculate-cost`
+* Description: Returns court base fee, equipment line items, and total cost breakdown for preview before booking
+* Request body:
+```JSON
+{
+  "facilityTypeId": "TENNIS",
+  "equipments": [
+    { "equipmentTypeId": "TENNIS_RACKET", "quantity": 2 },
+    { "equipmentTypeId": "TENNIS_BALL", "quantity": 3 }
+  ]
+}
+```
+* Response: `200 OK`
+```JSON
+{
+  "facilityTypeId": "TENNIS",
+  "facilityName": "Tennis Court",
+  "basePrice": 15,
+  "equipmentCost": 9,
+  "totalCost": 24,
+  "breakdown": [
+    { "equipmentTypeId": "TENNIS_RACKET", "equipmentName": "Tennis Racket", "quantity": 2, "unitPrice": 3, "subtotal": 6 },
+    { "equipmentTypeId": "TENNIS_BALL", "equipmentName": "Tennis Ball", "quantity": 3, "unitPrice": 1, "subtotal": 3 }
+  ]
+}
+```
 
 ---
 
