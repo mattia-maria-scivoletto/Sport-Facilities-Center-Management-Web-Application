@@ -60,7 +60,10 @@ function MyReservationsView({ user, setUser, setFeedback }) {
     setShowEditModal(true);
   };
 
-  const handleSavedEdit = (msg) => {
+  const handleSavedEdit = (msg, updateRes) => {
+    if (setUser && updateRes?.newWalletBalance !== undefined) {
+      setUser((prev) => ({ ...prev, walletBalance: updateRes.newWalletBalance }));
+    }
     if (setFeedback) {
       setFeedback({ type: 'success', message: msg });
     }
@@ -78,14 +81,19 @@ function MyReservationsView({ user, setUser, setFeedback }) {
       setCancelling(true);
       const res = await API.deleteReservation(reservationToCancel.reservationId);
 
-      if (setUser && res.newScore !== undefined) {
-        setUser((prev) => ({ ...prev, score: res.newScore }));
+      if (setUser) {
+        setUser((prev) => ({
+          ...prev,
+          score: res.newScore !== undefined ? res.newScore : prev.score,
+          walletBalance: res.newWalletBalance !== undefined ? res.newWalletBalance : prev.walletBalance,
+          bookingStreak: 0
+        }));
       }
 
       if (setFeedback) {
         setFeedback({
           type: 'warning',
-          message: `Booking cancelled. Your score was reduced by 1 (Current score: ${res.newScore}). 30-second cooldown active on ${reservationToCancel.typeName}.`
+          message: `Booking cancelled. Refunded ${res.refundAmount || 0} credits to your wallet. Score reduced by 1 (Current score: ${res.newScore}) and streak reset to 0.`
         });
       }
 
@@ -165,6 +173,9 @@ function MyReservationsView({ user, setUser, setFeedback }) {
                         <i className="bi bi-clock me-1"></i>
                         {r.startTime || '10:00'} - {r.endTime || '11:00'}
                       </Badge>
+                      <Badge bg="warning" text="dark" className="px-2 py-1 fs-6">
+                        💰 {r.totalCost ?? 0} credits
+                      </Badge>
                     </div>
 
                     <div className="mb-3">
@@ -186,7 +197,7 @@ function MyReservationsView({ user, setUser, setFeedback }) {
                               <strong>{eq.equipmentName}</strong>
                               {eq.isMandatory && (
                                 <Badge bg="danger" className="ms-2 small">
-                                  Mandatory (min {eq.minQuantity})
+                                  mandatory (min {eq.minQuantity})
                                 </Badge>
                               )}
                             </div>
@@ -216,9 +227,10 @@ function MyReservationsView({ user, setUser, setFeedback }) {
         </Row>
       )}
 
-      {/* edit equipment modal */}
+      {/* edit reservation modal */}
       {selectedReservation && (
         <EditReservationModal
+          key={selectedReservation.reservationId}
           show={showEditModal}
           handleClose={() => setShowEditModal(false)}
           reservation={selectedReservation}
@@ -246,6 +258,12 @@ function MyReservationsView({ user, setUser, setFeedback }) {
           <Alert variant="warning" className="small mb-0">
             <strong>Consequences of cancellation:</strong>
             <ul className="ps-3 mb-0 mt-1">
+              <li>
+                <strong>{reservationToCancel?.totalCost || 0} credits</strong> will be refunded to your virtual wallet.
+              </li>
+              <li>
+                Your reliable player booking streak will <strong>reset to 0</strong>.
+              </li>
               <li>
                 Your personal score will be <strong>reduced by 1</strong> (Penalty for cancelling).
               </li>

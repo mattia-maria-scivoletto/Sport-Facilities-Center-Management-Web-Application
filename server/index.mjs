@@ -10,6 +10,7 @@ import { TOTP } from 'otpauth';
 import daoUsers from './dao-users.mjs';
 import daoFacilities from './dao-facilities.mjs';
 import daoReservations from './dao-reservations.mjs';
+import daoWallet from './dao-wallet.mjs';
 
 const app = express();
 app.use(morgan('dev'));
@@ -124,12 +125,16 @@ async function formatClientUserInfo(req) {
   const freshUser = await daoUsers.getUserById(user.id);
   const score = freshUser ? freshUser.score : 0;
   const role = freshUser ? freshUser.role : 'user';
+  const walletBalance = freshUser && freshUser.walletBalance !== undefined ? freshUser.walletBalance : 500;
+  const bookingStreak = freshUser && freshUser.bookingStreak !== undefined ? freshUser.bookingStreak : 0;
   return {
     id: user.id,
     username: user.username,
     name: user.username.charAt(0).toUpperCase() + user.username.slice(1),
     score: score,
     role: role,
+    walletBalance: walletBalance,
+    bookingStreak: bookingStreak,
     canDoTotp: true,
     isTotp: req.session.method === 'totp'
   };
@@ -327,6 +332,100 @@ app.put(
     }
   }
 );
+
+// ==========================================
+// VIRTUAL WALLET & GAMIFICATION API ROUTES
+// ==========================================
+
+// GET /api/wallet
+// Get user's wallet balance, booking streak, badges, and recent transactions
+app.get('/api/wallet', isLoggedIn, async (req, res) => {
+  try {
+    const wallet = await daoWallet.getUserWallet(req.user.id);
+    if (!wallet) {
+      return res.status(404).json({ error: 'User wallet not found' });
+    }
+    const reservations = await daoReservations.getUserReservations(req.user.id);
+    const badges = daoWallet.getGamificationBadges(
+      wallet.walletBalance,
+      wallet.bookingStreak,
+      wallet.score,
+      reservations.length
+    );
+    const transactions = await daoWallet.getWalletTransactions(req.user.id, 20);
+
+    return res.status(200).json({
+      walletBalance: wallet.walletBalance,
+      bookingStreak: wallet.bookingStreak,
+      score: wallet.score,
+      totalReservations: reservations.length,
+      badges,
+      transactions
+    });
+  } catch (err) {
+    console.error('Error fetching wallet:', err);
+    return res.status(500).json({ error: 'Internal server error while fetching wallet' });
+  }
+});
+
+// POST /api/wallet/recharge
+// Add mock credits to user wallet
+app.post(
+  '/api/wallet/recharge',
+  isLoggedIn,
+  [
+    check('amount')
+      .isInt({ min: 1, max: 2000 })
+      .withMessage('Recharge amount must be an integer between 1 and 2000')
+  ],
+  async (req, res) => {
+    const errors = validationResult(req).formatWith(errorFormatter);
+    if (!errors.isEmpty()) {
+      return res.status(422).json({ error: errors.array().join(', ') });
+    }
+
+    try {
+      const amount = parseInt(req.body.amount, 10);
+      const result = await daoWallet.rechargeWallet(req.user.id, amount);
+      return res.status(200).json({
+        message: `Successfully recharged ${amount} mock credits!`,
+        amountAdded: amount,
+        newBalance: result.newBalance
+      });
+    } catch (err) {
+      console.error('Error recharging wallet:', err);
+      return res.status(500).json({ error: 'Internal server error while recharging wallet' });
+    }
+  }
+);
+
+// GET /api/wallet/transactions
+// Get transaction history
+app.get('/api/wallet/transactions', isLoggedIn, async (req, res) => {
+  try {
+    const transactions = await daoWallet.getWalletTransactions(req.user.id, 100);
+    return res.status(200).json(transactions);
+  } catch (err) {
+    console.error('Error fetching wallet transactions:', err);
+    return res.status(500).json({ error: 'Internal server error while fetching transactions' });
+  }
+});
+
+// POST /api/wallet/calculate-cost
+// Calculate booking price breakdown before reservation
+app.post('/api/wallet/calculate-cost', isLoggedIn, async (req, res) => {
+  try {
+    const { facilityTypeId, equipments } = req.body;
+    if (!facilityTypeId) {
+      return res.status(422).json({ error: 'facilityTypeId is required' });
+    }
+    const costDetails = await daoWallet.calculateBookingCost(facilityTypeId, equipments || []);
+    return res.status(200).json(costDetails);
+  } catch (err) {
+    console.error('Error calculating cost:', err);
+    return res.status(500).json({ error: 'Internal server error while calculating cost' });
+  }
+});
 
 // POST /api/sessions
 // login without TOTP/2FA
@@ -596,6 +695,24 @@ app.post(
         }
       }
 
+      // calculate pricing and check wallet balance
+      const pricing = await daoWallet.calculateBookingCost(facilityTypeId, equipmentsToSave);
+      const totalCost = pricing.totalCost;
+
+      const userWallet = await daoWallet.getUserWallet(req.user.id);
+      if (userWallet && userWallet.walletBalance < totalCost) {
+        return res.status(402).json({
+          error: `Insufficient wallet balance: This booking requires ${totalCost} credits, but you only have ${userWallet.walletBalance} credits. Please recharge your wallet.`
+        });
+      }
+
+      // deduct credits
+      await daoWallet.deductCredits(
+        req.user.id,
+        totalCost,
+        `Booking: ${selectedFacility.name} (${resolvedDate} ${resolvedStartTime})`
+      );
+
       // create reservation
       const result = await daoReservations.createReservation(
         req.user.id,
@@ -603,17 +720,30 @@ app.post(
         resolvedDate,
         resolvedStartTime,
         resolvedEndTime,
-        equipmentsToSave
+        equipmentsToSave,
+        totalCost
       );
 
+      // increment streak & reward milestone bonus if applicable
+      const streakResult = await daoWallet.incrementBookingStreak(req.user.id);
+
+      let successMsg = 'Facility and equipment reserved successfully!';
+      if (streakResult.bonusAwarded > 0) {
+        successMsg += ` 🎉 Streak bonus earned: +${streakResult.bonusAwarded} credits for reaching a ${streakResult.streak}-booking streak!`;
+      }
+
       return res.status(201).json({
-        message: 'Facility and equipment reserved successfully!',
+        message: successMsg,
         reservationId: result.id,
         facilityId: selectedFacility.id,
         facilityName: selectedFacility.name,
         bookingDate: resolvedDate,
         startTime: resolvedStartTime,
-        endTime: resolvedEndTime
+        endTime: resolvedEndTime,
+        totalCost,
+        newWalletBalance: streakResult.newBalance,
+        bookingStreak: streakResult.streak,
+        streakBonusAwarded: streakResult.bonusAwarded
       });
     } catch (err) {
       console.error('Error creating reservation:', err);
@@ -622,127 +752,256 @@ app.post(
   }
 );
 
+// PUT /api/reservations/:reservationId
 // PUT /api/reservations/:reservationId/equipment
-// edit equipment for an active reservation
-app.put(
-  '/api/reservations/:reservationId/equipment',
-  isLoggedIn,
-  [
-    check('reservationId').isInt({ min: 1 }).withMessage('Valid reservationId required'),
-    check('equipments').isArray().withMessage('Equipments array is required'),
-    check('equipments.*.equipmentTypeId').matches(/^[A-Z_]+$/)
-          .withMessage('equipmentTypeId must contain only uppercase letters and underscores'),
-    check('equipments.*.quantity').isInt({ min: 0 })
-          .withMessage('quantity must be an integer greater than or equal to 0')
-  ],
-  async (req, res) => {
-    const errors = validationResult(req).formatWith(errorFormatter);
-    if (!errors.isEmpty()) {
-      return res.status(422).json({ error: errors.array().join(', ') });
+// Edit reservation details (date, time slot, facility, and/or equipment)
+const updateReservationHandler = async (req, res) => {
+  const errors = validationResult(req).formatWith(errorFormatter);
+  if (!errors.isEmpty()) {
+    return res.status(422).json({ error: errors.array().join(', ') });
+  }
+
+  const reservationId = parseInt(req.params.reservationId, 10);
+  const {
+    bookingDate,
+    startTime,
+    endTime,
+    facilityId,
+    automaticFacilitySelection,
+    equipments
+  } = req.body;
+
+  try {
+    // 1. Verify reservation ownership
+    const reservation = await daoReservations.verifyReservationOwnership(reservationId);
+    if (!reservation) {
+      return res.status(404).json({ error: 'Reservation not found' });
+    }
+    if (reservation.user_id !== req.user.id) {
+      return res.status(403).json({ error: 'You do not own this reservation' });
     }
 
-    const reservationId = parseInt(req.params.reservationId, 10);
-    const { equipments } = req.body;
+    const facilityTypeId = reservation.facility_type_id;
 
-    try {
-      // verify reservation ownership
-      const reservation = await daoReservations.verifyReservationOwnership(reservationId);
-      if (!reservation) {
-        return res.status(404).json({ error: 'Reservation not found' });
-      }
-      if (reservation.user_id !== req.user.id) {
-        return res.status(403).json({ error: 'You do not own this reservation' });
-      }
+    // 2. Resolve target date and time slot
+    const targetDate = bookingDate || reservation.bookingDate;
+    const targetStartTime = startTime || reservation.startTime;
+    const calcEndTime = (sTime) => {
+      const [h, m] = sTime.split(':').map(Number);
+      const endH = String(h + 1).padStart(2, '0');
+      return `${endH}:${String(m).padStart(2, '0')}`;
+    };
+    const targetEndTime = endTime || calcEndTime(targetStartTime);
 
-      const facilityTypeId = reservation.facility_type_id;
+    // Validate that target date is not in the past
+    const today = new Date().toISOString().split('T')[0];
+    if (targetDate < today) {
+      return res.status(422).json({ error: 'Cannot reschedule a reservation to a past date.' });
+    }
 
-      // fetch fresh user score
-      const userScoreObj = await daoUsers.getUserScore(req.user.id);
-      const userScore = userScoreObj.score;
+    // 3. Resolve target facility
+    let selectedFacility = null;
+    const isAuto =
+      automaticFacilitySelection === 1 ||
+      automaticFacilitySelection === true ||
+      facilityId === 'auto';
 
-      // fetch rules and stock for that specific reservation's slot
-      const rules = await daoFacilities.getFacilityEquipmentRules(
+    if (isAuto) {
+      selectedFacility = await daoFacilities.getFacilityAutomaticSelection(
         facilityTypeId,
-        reservation.bookingDate,
-        reservation.startTime,
-        reservationId
+        targetDate,
+        targetStartTime
       );
-      const currentReservedEquipments = await daoReservations.getReservedEquipmentsbyReservation(reservationId);
-      const currentQtyMap = new Map();
-      for (const eq of currentReservedEquipments) {
-        currentQtyMap.set(eq.equipmentTypeId, eq.quantity);
+      if (!selectedFacility) {
+        return res.status(422).json({
+          error: `No available facilities of type ${facilityTypeId} on ${targetDate} at ${targetStartTime}.`
+        });
       }
+    } else {
+      const targetFacilityId = facilityId || reservation.facility_id;
+      selectedFacility = await daoFacilities.getFacilityManualSelection(targetFacilityId);
+      if (!selectedFacility) {
+        return res.status(422).json({ error: `Facility ${targetFacilityId} does not exist.` });
+      }
+      if (selectedFacility.facilityTypeId !== facilityTypeId) {
+        return res.status(422).json({ error: `Facility ${targetFacilityId} is not of type ${facilityTypeId}.` });
+      }
+      if (selectedFacility.isMaintenance === 1) {
+        return res.status(422).json({
+          error: `Facility ${selectedFacility.name} is currently under maintenance (${selectedFacility.maintenanceReason || 'Scheduled maintenance'}).`
+        });
+      }
+    }
 
-      const reqQtyMap = new Map();
+    // Collision check: exclude current reservation so it doesn't collide with itself if same court and slot
+    const collision = await daoReservations.checkCourtCollision(
+      selectedFacility.id,
+      targetDate,
+      targetStartTime,
+      reservationId
+    );
+    if (collision) {
+      return res.status(409).json({
+        error: `Collision detected: Facility ${selectedFacility.name} is already booked on ${targetDate} at ${targetStartTime}.`
+      });
+    }
+
+    // 4. Fetch fresh user score
+    const userScoreObj = await daoUsers.getUserScore(req.user.id);
+    const userScore = userScoreObj.score;
+
+    // 5. Fetch rules and equipment stock for target date and time slot (excluding current reservation)
+    const rules = await daoFacilities.getFacilityEquipmentRules(
+      facilityTypeId,
+      targetDate,
+      targetStartTime,
+      reservationId
+    );
+    const currentReservedEquipments = await daoReservations.getReservedEquipmentsbyReservation(reservationId);
+    const currentQtyMap = new Map();
+    for (const eq of currentReservedEquipments) {
+      currentQtyMap.set(eq.equipmentTypeId, eq.quantity);
+    }
+
+    const reqQtyMap = new Map();
+    if (Array.isArray(equipments)) {
       for (const item of equipments) {
         reqQtyMap.set(item.equipmentTypeId, parseInt(item.quantity, 10) || 0);
       }
+    }
 
-      // check mandatory minimums
-      for (const r of rules) {
-        const reqQty = reqQtyMap.has(r.equipmentTypeId)
-          ? reqQtyMap.get(r.equipmentTypeId)
-          : currentQtyMap.get(r.equipmentTypeId) || 0;
+    // Check mandatory minimums
+    for (const r of rules) {
+      const reqQty = reqQtyMap.has(r.equipmentTypeId)
+        ? reqQtyMap.get(r.equipmentTypeId)
+        : currentQtyMap.get(r.equipmentTypeId) || 0;
 
-        if (r.minQuantity > 0 && reqQty < r.minQuantity) {
-          return res.status(422).json({
-            error: `Cannot reduce ${r.equipmentName} below mandatory minimum of ${r.minQuantity}.`
-          });
-        }
+      if (r.minQuantity > 0 && reqQty < r.minQuantity) {
+        return res.status(422).json({
+          error: `Cannot reduce ${r.equipmentName} below mandatory minimum of ${r.minQuantity}.`
+        });
       }
+    }
 
-      // check negative score constraint
-      // users with negative score may still edit reservations
-      // only to remove equipment, not to add them
-      if (userScore < 0) {
-        for (const r of rules) {
-          const oldQty = currentQtyMap.get(r.equipmentTypeId) || 0;
-          const reqQty = reqQtyMap.has(r.equipmentTypeId)
-            ? reqQtyMap.get(r.equipmentTypeId)
-            : oldQty;
-
-          if (reqQty > oldQty) {
-            return res.status(403).json({
-              error: `Users with negative score (${userScore}) cannot add equipment (${r.equipmentName}). You may only remove or decrease equipment.`
-            });
-          }
-        }
-      }
-
-      // check inventory availability
+    // Check negative score constraint
+    if (userScore < 0) {
       for (const r of rules) {
         const oldQty = currentQtyMap.get(r.equipmentTypeId) || 0;
-        const newQty = reqQtyMap.has(r.equipmentTypeId) ? reqQtyMap.get(r.equipmentTypeId) : oldQty;
-        const delta = newQty - oldQty;
+        const reqQty = reqQtyMap.has(r.equipmentTypeId)
+          ? reqQtyMap.get(r.equipmentTypeId)
+          : oldQty;
 
-        if (delta > 0 && delta > r.availableQuantity) {
-          return res.status(422).json({
-            error: `Not enough stock: need +${delta} more ${r.equipmentName}, but only ${r.availableQuantity} available.`
+        if (r.minQuantity === 0 && reqQty > 0) {
+          return res.status(403).json({
+            error: `Users with negative score (${userScore}) cannot request optional equipment (${r.equipmentName}).`
+          });
+        }
+        if (reqQty > oldQty && reqQty > r.minQuantity) {
+          return res.status(403).json({
+            error: `Users with negative score (${userScore}) cannot add equipment (${r.equipmentName}). You may only remove or decrease equipment.`
           });
         }
       }
-
-      // build updated equipment list
-      const updatedEquipments = [];
-      for (const r of rules) {
-        const qty = reqQtyMap.has(r.equipmentTypeId)
-          ? reqQtyMap.get(r.equipmentTypeId)
-          : currentQtyMap.get(r.equipmentTypeId) || 0;
-        if (qty > 0) {
-          updatedEquipments.push({ equipmentTypeId: r.equipmentTypeId, quantity: qty });
-        }
-      }
-
-      // update equipments in database
-      await daoReservations.updateReservationEquipments(reservationId, updatedEquipments);
-
-      return res.status(200).json({ message: 'Reservation equipment modified successfully!' });
-    } catch (err) {
-      console.error('Error modifying reservation equipment:', err);
-      return res.status(500).json({ error: 'Internal server error' });
     }
+
+    // Check inventory availability in target slot
+    for (const r of rules) {
+      const reqQty = reqQtyMap.has(r.equipmentTypeId)
+        ? reqQtyMap.get(r.equipmentTypeId)
+        : (currentQtyMap.get(r.equipmentTypeId) || 0);
+
+      if (reqQty > r.availableQuantity) {
+        return res.status(422).json({
+          error: `Not enough stock: need ${reqQty} ${r.equipmentName}, but only ${r.availableQuantity} available on ${targetDate} at ${targetStartTime}.`
+        });
+      }
+    }
+
+    // Build updated equipment list
+    const updatedEquipments = [];
+    for (const r of rules) {
+      const qty = reqQtyMap.has(r.equipmentTypeId)
+        ? reqQtyMap.get(r.equipmentTypeId)
+        : currentQtyMap.get(r.equipmentTypeId) || 0;
+      if (qty > 0) {
+        updatedEquipments.push({ equipmentTypeId: r.equipmentTypeId, quantity: qty });
+      }
+    }
+
+    // Calculate new total cost and handle credit difference
+    const pricing = await daoWallet.calculateBookingCost(facilityTypeId, updatedEquipments);
+    const newTotalCost = pricing.totalCost;
+    const oldTotalCost = reservation.totalCost || 0;
+    const delta = newTotalCost - oldTotalCost;
+
+    if (delta > 0) {
+      const userWallet = await daoWallet.getUserWallet(req.user.id);
+      if (userWallet && userWallet.walletBalance < delta) {
+        return res.status(402).json({
+          error: `Insufficient wallet balance for update: Additional cost is ${delta} credits, but you only have ${userWallet.walletBalance} credits. Please recharge your wallet.`
+        });
+      }
+      await daoWallet.deductCredits(
+        req.user.id,
+        delta,
+        `Modification upgrade for booking #${reservationId}: ${selectedFacility.name}`,
+        'booking_adjustment'
+      );
+    } else if (delta < 0) {
+      await daoWallet.refundCredits(
+        req.user.id,
+        Math.abs(delta),
+        `Modification refund for booking #${reservationId}: ${selectedFacility.name}`,
+        'booking_adjustment'
+      );
+    }
+
+    // Update reservation in database
+    await daoReservations.updateReservation(
+      reservationId,
+      selectedFacility.id,
+      targetDate,
+      targetStartTime,
+      targetEndTime,
+      updatedEquipments,
+      newTotalCost
+    );
+
+    const freshWallet = await daoWallet.getUserWallet(req.user.id);
+
+    return res.status(200).json({
+      message: 'Reservation updated successfully!',
+      reservationId,
+      facilityId: selectedFacility.id,
+      facilityName: selectedFacility.name,
+      bookingDate: targetDate,
+      startTime: targetStartTime,
+      endTime: targetEndTime,
+      equipments: updatedEquipments,
+      totalCost: newTotalCost,
+      costDelta: delta,
+      newWalletBalance: freshWallet ? freshWallet.walletBalance : undefined
+    });
+  } catch (err) {
+    console.error('Error modifying reservation:', err);
+    return res.status(500).json({ error: 'Internal server error while modifying reservation' });
   }
-);
+};
+
+const reservationUpdateValidators = [
+  check('reservationId').isInt({ min: 1 }).withMessage('Valid reservationId required'),
+  check('bookingDate').optional().isDate().withMessage('bookingDate must be YYYY-MM-DD format'),
+  check('startTime').optional().matches(/^(0[8-9]|1[0-9]|2[0-1]):00$/).withMessage('startTime must be on the hour between 08:00 and 21:00'),
+  check('endTime').optional().matches(/^(0[9]|1[0-9]|2[0-2]):00$/).withMessage('endTime must be on the hour between 09:00 and 22:00'),
+  check('equipments').optional().isArray().withMessage('Equipments must be an array'),
+  check('equipments.*.equipmentTypeId').optional().matches(/^[A-Z_]+$/)
+        .withMessage('equipmentTypeId must contain only uppercase letters and underscores'),
+  check('equipments.*.quantity').optional().isInt({ min: 0 })
+        .withMessage('quantity must be an integer greater than or equal to 0')
+];
+
+app.put('/api/reservations/:reservationId', isLoggedIn, reservationUpdateValidators, updateReservationHandler);
+app.put('/api/reservations/:reservationId/equipment', isLoggedIn, reservationUpdateValidators, updateReservationHandler);
 
 // DELETE /api/reservations/:reservationId
 // delete reservation, decrement score
@@ -770,18 +1029,35 @@ app.delete(
       }
 
       const facilityTypeId = reservation.facility_type_id;
+      const refundAmount = reservation.totalCost || 0;
      
       await daoReservations.deleteReservationAndRelatedEquipments(reservationId);
+
+      // Refund credits to user wallet
+      if (refundAmount > 0) {
+        await daoWallet.refundCredits(
+          req.user.id,
+          refundAmount,
+          `Refund for cancelled booking #${reservationId}: ${reservation.facilityName} (${reservation.bookingDate} ${reservation.startTime})`
+        );
+      }
+
+      // Reset consecutive booking streak to 0
+      await daoWallet.resetBookingStreak(req.user.id);
 
       await daoUsers.decreaseUserScore(req.user.id);
 
       await daoReservations.recordCooldownTimestamp(req.user.id, facilityTypeId);
 
       const freshScore = await daoUsers.getUserScore(req.user.id);
+      const freshWallet = await daoWallet.getUserWallet(req.user.id);
 
       return res.status(200).json({
-        message: 'Reservation cancelled successfully. Your score has been reduced by 1.',
+        message: `Reservation cancelled successfully. Refunded ${refundAmount} credits to your wallet. Your score was reduced by 1 and streak was reset to 0.`,
         newScore: freshScore.score,
+        refundAmount,
+        newWalletBalance: freshWallet ? freshWallet.walletBalance : undefined,
+        bookingStreak: 0,
         cooldownFacilityTypeId: facilityTypeId
       });
     } catch (err) {

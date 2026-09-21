@@ -10,9 +10,11 @@ const getUserReservations = (userId) => {
         r.booking_date AS bookingDate,
         r.start_time AS startTime,
         r.end_time AS endTime,
+        r.total_cost AS totalCost,
         f.name AS facilityName,
         f.facility_type_id AS facilityTypeId,
-        ft.name AS typeName
+        ft.name AS typeName,
+        ft.base_price AS basePrice
       FROM reservations r
       JOIN facilities f ON f.id = r.facility_id
       JOIN facility_types ft ON ft.id = f.facility_type_id
@@ -25,6 +27,7 @@ const getUserReservations = (userId) => {
         re.reservation_id AS reservationId,
         re.equipment_type_id AS equipmentTypeId,
         eq.name AS equipmentName,
+        eq.unit_price AS unitPrice,
         re.quantity AS quantity,
         COALESCE(fer.min_quantity, 0) AS minQuantity
       FROM reservation_equipment re
@@ -49,6 +52,7 @@ const getUserReservations = (userId) => {
             .map((eq) => ({
               equipmentTypeId: eq.equipmentTypeId,
               equipmentName: eq.equipmentName,
+              unitPrice: eq.unitPrice,
               quantity: eq.quantity,
               minQuantity: eq.minQuantity,
               isMandatory: eq.minQuantity > 0
@@ -119,13 +123,13 @@ const checkCourtCollision = (facilityId, bookingDate, startTime, excludeReservat
   });
 };
 
-// create a new reservation with date, time slots, and equipment
-const createReservation = (userId, facilityId, bookingDate, startTime, endTime, equipments) => {
+// create a new reservation with date, time slots, equipment, and totalCost
+const createReservation = (userId, facilityId, bookingDate, startTime, endTime, equipments, totalCost = 0) => {
   return new Promise((resolve, reject) => {
     db.serialize(() => {
-      const sqlRes = `INSERT INTO reservations (user_id, facility_id, booking_date, start_time, end_time) 
-                      VALUES (?, ?, ?, ?, ?);`;
-      db.run(sqlRes, [userId, facilityId, bookingDate, startTime, endTime], function (err) {
+      const sqlRes = `INSERT INTO reservations (user_id, facility_id, booking_date, start_time, end_time, total_cost) 
+                      VALUES (?, ?, ?, ?, ?, ?);`;
+      db.run(sqlRes, [userId, facilityId, bookingDate, startTime, endTime, totalCost], function (err) {
         if (err) return reject(err);
         const reservationId = this.lastID;
 
@@ -161,10 +165,11 @@ const createReservation = (userId, facilityId, bookingDate, startTime, endTime, 
 const verifyReservationOwnership = (reservationId) => {
   return new Promise((resolve, reject) => {
     const sql = `SELECT r.id, r.user_id, r.facility_id, r.booking_date AS bookingDate, 
-                        r.start_time AS startTime, r.end_time AS endTime, 
-                        f.facility_type_id, f.name AS facilityName
+                        r.start_time AS startTime, r.end_time AS endTime, r.total_cost AS totalCost,
+                        f.facility_type_id, f.name AS facilityName, ft.name AS typeName, ft.base_price AS basePrice
                 FROM reservations r
                 JOIN facilities f ON f.id = r.facility_id
+                JOIN facility_types ft ON ft.id = f.facility_type_id
                 WHERE r.id = ?;`;
     db.get(sql, [reservationId], (err, row) => {
       if (err) reject(err);
@@ -251,6 +256,57 @@ const updateReservationEquipments = (reservationId, equipments) => {
           } else {
             resolve({ success: true });
           }
+        });
+      });
+    });
+  });
+};
+
+// update full reservation details (date, time slot, facility) and equipment
+const updateReservation = (reservationId, facilityId, bookingDate, startTime, endTime, equipments, totalCost = null) => {
+  return new Promise((resolve, reject) => {
+    db.serialize(() => {
+      const sqlRes = totalCost !== null
+        ? `UPDATE reservations 
+           SET facility_id = ?, booking_date = ?, start_time = ?, end_time = ?, total_cost = ?
+           WHERE id = ?;`
+        : `UPDATE reservations 
+           SET facility_id = ?, booking_date = ?, start_time = ?, end_time = ?
+           WHERE id = ?;`;
+      const params = totalCost !== null
+        ? [facilityId, bookingDate, startTime, endTime, totalCost, reservationId]
+        : [facilityId, bookingDate, startTime, endTime, reservationId];
+
+      db.run(sqlRes, params, function (err) {
+        if (err) return reject(err);
+
+        const deleteSql = 'DELETE FROM reservation_equipment WHERE reservation_id = ?;';
+        db.run(deleteSql, [reservationId], (delErr) => {
+          if (delErr) return reject(delErr);
+
+          if (!equipments || equipments.length === 0) {
+            return resolve({ success: true });
+          }
+
+          const insertSql = 'INSERT INTO reservation_equipment (reservation_id, equipment_type_id, quantity) VALUES (?, ?, ?);';
+          const stmt = db.prepare(insertSql);
+          let errorOccurred = null;
+
+          for (const item of equipments) {
+            if (item.quantity > 0) {
+              stmt.run(reservationId, item.equipmentTypeId, item.quantity, (stmtErr) => {
+                if (stmtErr) errorOccurred = stmtErr;
+              });
+            }
+          }
+
+          stmt.finalize((finErr) => {
+            if (finErr || errorOccurred) {
+              reject(finErr || errorOccurred);
+            } else {
+              resolve({ success: true });
+            }
+          });
         });
       });
     });
@@ -421,6 +477,7 @@ export default {
   getScheduleMatrix,
   getReservedEquipmentsbyReservation,
   updateReservationEquipments,
+  updateReservation,
   deleteReservationAndRelatedEquipments,
   getAdminAnalytics,
 };

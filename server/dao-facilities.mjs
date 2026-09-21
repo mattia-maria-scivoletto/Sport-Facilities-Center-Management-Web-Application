@@ -14,6 +14,7 @@ const getPublicAvailability = (bookingDate, startTime) => {
         f.id AS code,
         f.facility_type_id AS typeId,
         ft.name AS typeName,
+        ft.base_price AS basePrice,
         f.is_maintenance AS isMaintenance,
         f.maintenance_reason AS maintenanceReason,
         CASE WHEN r.id IS NOT NULL THEN 1 ELSE 0 END AS isBooked
@@ -28,6 +29,7 @@ const getPublicAvailability = (bookingDate, startTime) => {
         eq.id AS id,
         eq.name AS name,
         eq.total_quantity AS totalQuantity,
+        eq.unit_price AS unitPrice,
         eq.total_quantity - COALESCE(SUM(re.quantity), 0) AS availableQuantity
       FROM equipment_types eq
       LEFT JOIN (
@@ -36,7 +38,7 @@ const getPublicAvailability = (bookingDate, startTime) => {
         JOIN reservations r ON r.id = re.reservation_id
         WHERE r.booking_date = ? AND r.start_time = ?
       ) re ON re.equipment_type_id = eq.id
-      GROUP BY eq.id, eq.name, eq.total_quantity
+      GROUP BY eq.id, eq.name, eq.total_quantity, eq.unit_price
       ORDER BY eq.id;
     `;
 
@@ -52,6 +54,7 @@ const getPublicAvailability = (bookingDate, startTime) => {
             facilitiesMap.set(row.typeId, {
               typeId: row.typeId,
               typeName: row.typeName,
+              basePrice: row.basePrice || 0,
               totalCount: 0,
               availableCount: 0,
               facilityCodes: []
@@ -96,6 +99,7 @@ const getAllFacilities = (bookingDate, startTime) => {
         f.facility_type_id AS facilityTypeId,
         f.name AS name,
         ft.name AS typeName,
+        ft.base_price AS basePrice,
         f.is_maintenance AS isMaintenance,
         f.maintenance_reason AS maintenanceReason,
         CASE 
@@ -118,7 +122,7 @@ const getAllFacilities = (bookingDate, startTime) => {
 // get all facility types
 const getAllFacilityTypes = () => {
   return new Promise((resolve, reject) => {
-    const sql = 'SELECT id, name FROM facility_types ORDER BY name;';
+    const sql = 'SELECT id, name, base_price AS basePrice FROM facility_types ORDER BY name;';
     db.all(sql, [], (err, rows) => {
       if (err) reject(err);
       else resolve(rows);
@@ -136,6 +140,7 @@ const getFacilityEquipmentRules = (facilityTypeId, bookingDate, startTime, exclu
       SELECT 
         fer.equipment_type_id AS equipmentTypeId,
         eq.name AS equipmentName,
+        eq.unit_price AS unitPrice,
         fer.min_quantity AS minQuantity,
         eq.total_quantity AS totalQuantity,
         eq.total_quantity - COALESCE(SUM(re.quantity), 0) AS availableQuantity
@@ -149,7 +154,7 @@ const getFacilityEquipmentRules = (facilityTypeId, bookingDate, startTime, exclu
         ${excludeReservationId ? 'AND r.id != ?' : ''}
       ) re ON re.equipment_type_id = eq.id
       WHERE fer.facility_type_id = ?
-      GROUP BY fer.equipment_type_id, eq.name, fer.min_quantity, eq.total_quantity
+      GROUP BY fer.equipment_type_id, eq.name, eq.unit_price, fer.min_quantity, eq.total_quantity
       ORDER BY fer.min_quantity DESC, eq.name;
     `;
     const params = excludeReservationId
@@ -166,9 +171,12 @@ const getFacilityEquipmentRules = (facilityTypeId, bookingDate, startTime, exclu
 // get facility for manual selection
 const getFacilityManualSelection = (facilityId) => {
   return new Promise((resolve, reject) => {
-    const sql = `SELECT id, facility_type_id AS facilityTypeId, name, is_maintenance AS isMaintenance, maintenance_reason AS maintenanceReason
-                FROM facilities 
-                WHERE id = ?;`;
+    const sql = `SELECT f.id, f.facility_type_id AS facilityTypeId, f.name, 
+                        f.is_maintenance AS isMaintenance, f.maintenance_reason AS maintenanceReason,
+                        ft.base_price AS basePrice
+                FROM facilities f
+                JOIN facility_types ft ON ft.id = f.facility_type_id
+                WHERE f.id = ?;`;
     db.get(sql, [facilityId], (err, row) => {
       if (err) reject(err);
       else resolve(row);
@@ -182,11 +190,13 @@ const getFacilityAutomaticSelection = (facilityType, bookingDate, startTime) => 
   const time = resolveTime(startTime);
 
   return new Promise((resolve, reject) => {
-    const sql = `SELECT id, facility_type_id AS facilityTypeId, name 
-                FROM facilities 
-                WHERE facility_type_id = ? 
-                AND is_maintenance = 0
-                AND id NOT IN (
+    const sql = `SELECT f.id, f.facility_type_id AS facilityTypeId, f.name,
+                        ft.base_price AS basePrice
+                FROM facilities f
+                JOIN facility_types ft ON ft.id = f.facility_type_id
+                WHERE f.facility_type_id = ? 
+                AND f.is_maintenance = 0
+                AND f.id NOT IN (
                   SELECT facility_id FROM reservations 
                   WHERE booking_date = ? AND start_time = ?
                 )
@@ -207,6 +217,7 @@ const getAllAdminFacilities = () => {
         f.facility_type_id AS facilityTypeId,
         f.name,
         ft.name AS typeName,
+        ft.base_price AS basePrice,
         f.is_maintenance AS isMaintenance,
         f.maintenance_reason AS maintenanceReason,
         (SELECT COUNT(*) FROM reservations r WHERE r.facility_id = f.id) AS totalBookingsCount
@@ -243,6 +254,7 @@ const getAllAdminEquipment = () => {
       SELECT 
         eq.id,
         eq.name,
+        eq.unit_price AS unitPrice,
         eq.total_quantity AS totalQuantity,
         COALESCE(MAX(slot_rentals.rented_in_slot), 0) AS maxActiveRented,
         COALESCE(SUM(re_total.quantity), 0) AS totalUnitsRentedAllTime
@@ -255,7 +267,7 @@ const getAllAdminEquipment = () => {
         GROUP BY r.booking_date, r.start_time, re.equipment_type_id
       ) slot_rentals ON slot_rentals.equipment_type_id = eq.id
       LEFT JOIN reservation_equipment re_total ON re_total.equipment_type_id = eq.id
-      GROUP BY eq.id, eq.name, eq.total_quantity
+      GROUP BY eq.id, eq.name, eq.total_quantity, eq.unit_price
       ORDER BY eq.id;
     `;
     db.all(sql, [], (err, rows) => {

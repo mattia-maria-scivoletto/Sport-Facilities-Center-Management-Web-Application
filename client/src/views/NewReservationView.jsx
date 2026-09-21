@@ -3,6 +3,7 @@ import { Container, Row, Col, Card, Form, Button, Table, Badge, Alert, Spinner }
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import dayjs from 'dayjs';
 import API from '../services/API';
+import WalletModal from '../components/WalletModal';
 
 const TIME_SLOTS = [
   { start: '08:00', end: '09:00', label: '08:00 - 09:00' },
@@ -37,8 +38,9 @@ const getAvailableTimeSlots = (dateStr) => {
   });
 };
 
-function NewReservationView({ user, setFeedback }) {
+function NewReservationView({ user, setUser, setFeedback }) {
   const [searchParams] = useSearchParams();
+  const [showWalletModal, setShowWalletModal] = useState(false);
 
   const initialBookingDate = searchParams.get('date') || dayjs().format('YYYY-MM-DD');
   const initialAvailableSlots = getAvailableTimeSlots(initialBookingDate);
@@ -221,10 +223,21 @@ function NewReservationView({ user, setFeedback }) {
     try {
       setSubmitting(true);
       const res = await API.createReservation(reservationPayload);
+      if (setUser && res.newWalletBalance !== undefined) {
+        setUser((prev) => ({
+          ...prev,
+          walletBalance: res.newWalletBalance,
+          bookingStreak: res.bookingStreak
+        }));
+      }
       if (setFeedback) {
+        let msg = `Facility reserved successfully: ${res.facilityName || res.facilityId} on ${res.bookingDate} at ${res.startTime}-${res.endTime} (Cost: ${res.totalCost} credits).`;
+        if (res.streakBonusAwarded > 0) {
+          msg += ` 🎉 Streak milestone bonus: +${res.streakBonusAwarded} credits!`;
+        }
         setFeedback({
           type: 'success',
-          message: `Facility reserved successfully: ${res.facilityName || res.facilityId} on ${res.bookingDate} at ${res.startTime}-${res.endTime} (Booking #${res.reservationId}).`
+          message: msg
         });
       }
       navigate('/reservations');
@@ -246,6 +259,19 @@ function NewReservationView({ user, setFeedback }) {
   const availableTimeSlots = getAvailableTimeSlots(bookingDate);
 
   const isNegativeScore = user && user.score < 0;
+
+  const currentFacilityType = facilityTypes.find((ft) => ft.id === selectedType);
+  const baseCourtFee = currentFacilityType?.basePrice ?? 10;
+  let equipmentRentalFee = 0;
+  for (const r of rules) {
+    const qty = equipmentQuantities[r.equipmentTypeId] || 0;
+    const unitPrice = r.unitPrice ?? 2;
+    equipmentRentalFee += qty * unitPrice;
+  }
+  const totalBookingCost = baseCourtFee + equipmentRentalFee;
+  const userBalance = user?.walletBalance ?? 0;
+  const hasSufficientCredits = userBalance >= totalBookingCost;
+  const balanceAfterBooking = userBalance - totalBookingCost;
 
   return (
     <Container className="pb-5">
@@ -522,6 +548,44 @@ function NewReservationView({ user, setFeedback }) {
                     </Table>
                   )}
 
+                  {/* Step 3: Pricing & Wallet Summary */}
+                  <Card className="bg-light border-0 p-3 mb-4 rounded shadow-sm">
+                    <div className="d-flex justify-content-between align-items-center mb-1">
+                      <span className="text-muted small">Court Base Fee ({currentFacilityType?.name || 'Sport'}):</span>
+                      <span className="fw-semibold">{baseCourtFee} credits</span>
+                    </div>
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <span className="text-muted small">Equipment Rental Fee:</span>
+                      <span className="fw-semibold">{equipmentRentalFee} credits</span>
+                    </div>
+                    <hr className="my-2 text-muted" />
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <span className="fw-bold">Total Booking Cost:</span>
+                      <span className="fw-bold fs-5 text-primary">💰 {totalBookingCost} credits</span>
+                    </div>
+                    <div className="d-flex justify-content-between align-items-center small">
+                      <span className="text-muted">Your Wallet Balance:</span>
+                      <span className={hasSufficientCredits ? 'fw-bold text-success' : 'fw-bold text-danger'}>
+                        {userBalance} credits {hasSufficientCredits && `(${balanceAfterBooking} remaining)`}
+                      </span>
+                    </div>
+                    {!hasSufficientCredits && (
+                      <Alert variant="danger" className="mt-3 mb-0 py-2 small d-flex justify-content-between align-items-center">
+                        <span>
+                          <i className="bi bi-exclamation-triangle-fill me-1"></i>
+                          Insufficient credits (short by {totalBookingCost - userBalance} credits).
+                        </span>
+                        <Button
+                          variant="outline-danger"
+                          size="sm"
+                          onClick={() => setShowWalletModal(true)}
+                        >
+                          Recharge
+                        </Button>
+                      </Alert>
+                    )}
+                  </Card>
+
                   <div className="d-grid gap-2 mt-auto">
                     <Button
                       variant="primary"
@@ -531,7 +595,8 @@ function NewReservationView({ user, setFeedback }) {
                         submitting ||
                         !timeSlot ||
                         availableTimeSlots.length === 0 ||
-                        (assignmentMode === 'manual' && !selectedFacilityId)
+                        (assignmentMode === 'manual' && !selectedFacilityId) ||
+                        !hasSufficientCredits
                       }
                     >
                       {submitting ? 'Confirming Reservation...' : 'Confirm & Reserve Facility'}
@@ -546,6 +611,17 @@ function NewReservationView({ user, setFeedback }) {
           </Row>
         </Form>
       )}
+
+      <WalletModal
+        show={showWalletModal}
+        handleClose={() => setShowWalletModal(false)}
+        user={user}
+        onWalletUpdated={(newBal) => {
+          if (setUser) {
+            setUser((prev) => ({ ...prev, walletBalance: newBal }));
+          }
+        }}
+      />
     </Container>
   );
 }

@@ -71,7 +71,7 @@ function App() {
     <BrowserRouter>
       <div className="min-vh-100 d-flex flex-column bg-light">
         {/* navigation bar */}
-        <Navigation user={user} loggedIn={loggedIn} logout={handleLogout} />
+        <Navigation user={user} setUser={setUser} loggedIn={loggedIn} logout={handleLogout} />
 
         {/* Feedback alert message */}
         {feedback && (
@@ -155,7 +155,7 @@ function App() {
               path="/new-reservation"
               element={
                 loggedIn ? (
-                  <NewReservationView user={user} setFeedback={setFeedback} />
+                  <NewReservationView user={user} setUser={setUser} setFeedback={setFeedback} />
                 ) : (
                   <Navigate to="/login" replace />
                 )

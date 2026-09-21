@@ -4,7 +4,7 @@ import crypto from 'crypto';
 // return user by id
 const getUserById = (id) => {
   return new Promise((resolve, reject) => {
-    const sql = 'SELECT id, username, score, totp_secret, lastTotpStep, role FROM users WHERE id = ?';
+    const sql = 'SELECT id, username, score, totp_secret, lastTotpStep, role, wallet_balance, booking_streak FROM users WHERE id = ?';
     db.get(sql, [id], (err, row) => {
       if (err) {
         reject(err);
@@ -18,7 +18,9 @@ const getUserById = (id) => {
           score: row.score,
           secret: row.totp_secret,
           lastTotpStep: row.lastTotpStep,
-          role: row.role || 'user'
+          role: row.role || 'user',
+          walletBalance: row.wallet_balance !== undefined ? row.wallet_balance : 500,
+          bookingStreak: row.booking_streak !== undefined ? row.booking_streak : 0
         };
         resolve(user);
       }
@@ -43,7 +45,9 @@ const getUser = (username, password) => {
           score: row.score,
           secret: row.totp_secret,
           lastTotpStep: row.lastTotpStep,
-          role: row.role || 'user'
+          role: row.role || 'user',
+          walletBalance: row.wallet_balance !== undefined ? row.wallet_balance : 500,
+          bookingStreak: row.booking_streak !== undefined ? row.booking_streak : 0
         };
 
         crypto.scrypt(password, row.salt, 32, function (err, hashedPassword) {
@@ -122,7 +126,7 @@ const getUserScore = (userId) => {
 // get user by username
 const getUserByUsername = (username) => {
   return new Promise((resolve, reject) => {
-    const sql = 'SELECT id, username, score, totp_secret, lastTotpStep FROM users WHERE LOWER(username) = LOWER(?)';
+    const sql = 'SELECT id, username, score, totp_secret, lastTotpStep, wallet_balance, booking_streak FROM users WHERE LOWER(username) = LOWER(?)';
     db.get(sql, [username], (err, row) => {
       if (err) {
         reject(err);
@@ -143,15 +147,22 @@ const createUser = (username, password, role = 'user') => {
       if (err) return reject(err);
       const passwordHash = hashedPassword.toString('hex');
       const sql =
-        'INSERT INTO users (username, password_hash, salt, score, totp_secret, lastTotpStep, role) VALUES (?, ?, ?, 0, ?, 0, ?)';
+        'INSERT INTO users (username, password_hash, salt, score, totp_secret, lastTotpStep, role, wallet_balance, booking_streak) VALUES (?, ?, ?, 0, ?, 0, ?, 500, 0)';
       db.run(sql, [username.trim(), passwordHash, salt, 'LXBSMDTMSP2I5XFXIYRGFVWSFI', role], function (dbErr) {
         if (dbErr) return reject(dbErr);
+        const newUserId = this.lastID;
+        // insert initial welcome credit transaction
+        const txSql = "INSERT INTO wallet_transactions (user_id, amount, type, description) VALUES (?, 500, 'recharge', 'Welcome bonus credit allocation')";
+        db.run(txSql, [newUserId], () => {});
+
         resolve({
-          id: this.lastID,
+          id: newUserId,
           username: username.trim(),
           name: username.trim().charAt(0).toUpperCase() + username.trim().slice(1),
           score: 0,
-          role: role
+          role: role,
+          walletBalance: 500,
+          bookingStreak: 0
         });
       });
     });
@@ -162,7 +173,7 @@ const createUser = (username, password, role = 'user') => {
 const getAllUsers = () => {
   return new Promise((resolve, reject) => {
     const sql = `
-      SELECT u.id, u.username, u.score, u.role, u.lastTotpStep,
+      SELECT u.id, u.username, u.score, u.role, u.lastTotpStep, u.wallet_balance, u.booking_streak,
              COUNT(r.id) as reservationCount
       FROM users u
       LEFT JOIN reservations r ON u.id = r.user_id
@@ -178,7 +189,9 @@ const getAllUsers = () => {
         score: r.score,
         role: r.role || 'user',
         isTotp: r.lastTotpStep > 0,
-        reservationCount: r.reservationCount || 0
+        reservationCount: r.reservationCount || 0,
+        walletBalance: r.wallet_balance !== undefined ? r.wallet_balance : 500,
+        bookingStreak: r.booking_streak !== undefined ? r.booking_streak : 0
       }));
       resolve(users);
     });

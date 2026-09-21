@@ -96,6 +96,17 @@ const createReservation = async (reservationData) => {
   );
 };
 
+const updateReservation = async (reservationId, reservationData) => {
+  return getJson(
+    fetch(SERVER_URL + `reservations/${reservationId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify(reservationData)
+    })
+  );
+};
+
 const updateReservationEquipment = async (reservationId, equipments) => {
   return getJson(
     fetch(SERVER_URL + `reservations/${reservationId}/equipment`, {
@@ -246,6 +257,44 @@ const updateUserRole = async (userId, role) => {
   );
 };
 
+const getWallet = async () => {
+  return getJson(
+    fetch(SERVER_URL + 'wallet', {
+      credentials: 'include'
+    })
+  );
+};
+
+const rechargeWallet = async (amount) => {
+  return getJson(
+    fetch(SERVER_URL + 'wallet/recharge', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ amount })
+    })
+  );
+};
+
+const getWalletTransactions = async () => {
+  return getJson(
+    fetch(SERVER_URL + 'wallet/transactions', {
+      credentials: 'include'
+    })
+  );
+};
+
+const calculateBookingCost = async (facilityTypeId, equipments) => {
+  return getJson(
+    fetch(SERVER_URL + 'wallet/calculate-cost', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ facilityTypeId, equipments })
+    })
+  );
+};
+
 const API = {
   getPublicAvailability,
   getScheduleCalendar,
@@ -254,6 +303,7 @@ const API = {
   getFacilityRules,
   getUserReservations,
   createReservation,
+  updateReservation,
   updateReservationEquipment,
   deleteReservation,
   logIn,
@@ -268,7 +318,11 @@ const API = {
   getAdminEquipment,
   updateEquipmentStock,
   getAdminUsers,
-  updateUserRole
+  updateUserRole,
+  getWallet,
+  rechargeWallet,
+  getWalletTransactions,
+  calculateBookingCost
 };
 
 export default API;
