@@ -1,2 +1,0 @@
-- Manual source code review to get better understanding of the project
-and validate security checks goodness, also to find possible bugs in the source code
