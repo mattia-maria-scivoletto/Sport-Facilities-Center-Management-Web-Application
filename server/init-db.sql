@@ -158,8 +158,10 @@ CREATE TABLE facility_release_logs (
 );
 
 -- Seed release logs for cancellation analytics
-INSERT INTO facility_release_logs (id, user_id, facility_type_id, released_at) VALUES(1, 2, 'BASKETBALL', datetime('now', '-2 hours'));
-INSERT INTO facility_release_logs (id, user_id, facility_type_id, released_at) VALUES(2, 3, 'TENNIS', datetime('now', '-4 hours'));
+INSERT INTO facility_release_logs (id, user_id, facility_type_id, released_at)
+VALUES(1, 2, 'BASKETBALL', datetime('now', '-2 hours'));
+INSERT INTO facility_release_logs (id, user_id, facility_type_id, released_at)
+VALUES(2, 3, 'TENNIS', datetime('now', '-4 hours'));
 
 CREATE TABLE IF NOT EXISTS "reservation_equipment" (
     reservation_id INTEGER NOT NULL,
@@ -195,14 +197,17 @@ CREATE TABLE IF NOT EXISTS wallet_transactions (
 -- Initial seed transactions:
 INSERT INTO wallet_transactions (id, user_id, amount, type, description, created_at)
 VALUES(1, 1, 500, 'recharge', 'Welcome bonus credit allocation', datetime('now', '-5 days'));
+
 INSERT INTO wallet_transactions (id, user_id, amount, type, description, created_at)
 VALUES(2, 2, 500, 'recharge', 'Welcome bonus credit allocation', datetime('now', '-5 days'));
 INSERT INTO wallet_transactions (id, user_id, amount, type, description, created_at)
 VALUES(3, 2, -14, 'booking_payment', 'Booking #1: Basketball Court #1', datetime('now', '-1 day'));
+
 INSERT INTO wallet_transactions (id, user_id, amount, type, description, created_at)
 VALUES(4, 3, 500, 'recharge', 'Welcome bonus credit allocation', datetime('now', '-5 days'));
 INSERT INTO wallet_transactions (id, user_id, amount, type, description, created_at)
 VALUES(5, 3, -25, 'booking_payment', 'Booking #2: Tennis Court #3', datetime('now', '-1 day'));
+
 INSERT INTO wallet_transactions (id, user_id, amount, type, description, created_at)
 VALUES(6, 4, 500, 'recharge', 'Welcome bonus credit allocation', datetime('now', '-5 days'));
 INSERT INTO wallet_transactions (id, user_id, amount, type, description, created_at)
@@ -210,11 +215,18 @@ VALUES(7, 4, -14, 'booking_payment', 'Booking #3: Volleyball Court #1', datetime
 INSERT INTO wallet_transactions (id, user_id, amount, type, description, created_at)
 VALUES(8, 4, -13, 'booking_payment', 'Booking #4: Table Tennis Table #1', datetime('now', '-1 day'));
 
+INSERT INTO wallet_transactions (id, user_id, amount, type, description, created_at)
+VALUES(9, 5, 500, 'recharge', 'Welcome bonus credit allocation', datetime('now', '-5 days'));
+
+INSERT INTO wallet_transactions (id, user_id, amount, type, description, created_at)
+VALUES(10, 6, 500, 'recharge', 'Welcome bonus credit allocation', datetime('now', '-5 days'));
+
+
 DELETE FROM sqlite_sequence;
 INSERT INTO sqlite_sequence VALUES('users',6);
 INSERT INTO sqlite_sequence VALUES('reservations',4);
 INSERT INTO sqlite_sequence VALUES('facility_release_logs',2);
-INSERT INTO sqlite_sequence VALUES('wallet_transactions',8);
+INSERT INTO sqlite_sequence VALUES('wallet_transactions',10);
 
 CREATE UNIQUE INDEX idx_facility_release_user_facility 
 ON facility_release_logs (user_id, facility_type_id);
