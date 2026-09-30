@@ -678,14 +678,15 @@ and total reservations count
 
 ## Database Tables
 
-- Table `users`: Contains `id`, `username`, `password_hash`, `salt`, `score`, `totp_secret`, `lastTotpStep`, `role`
-- Table `facility_types`: Contains `id`, `name`
+- Table `users`: Contains `id`, `username`, `password_hash`, `salt`, `score`, `totp_secret`, `lastTotpStep`, `role`, `wallet_balance`, `booking_streak`
+- Table `facility_types`: Contains `id`, `name`, `base_price`
 - Table `facilities`: Contains `id`, `facility_type_id`, `name`, `is_maintenance`, `maintenance_reason`
-- Table `equipment_types`: Contains `id`, `name`, `total_quantity`
+- Table `equipment_types`: Contains `id`, `name`, `total_quantity`, `unit_price`
 - Table `facility_equipment_rules`: Contains `facility_type_id`, `equipment_type_id`, `min_quantity`
-- Table `reservations`: Contains `id`, `user_id`, `facility_id`, `booking_date`, `start_time`, `end_time`
+- Table `reservations`: Contains `id`, `user_id`, `facility_id`, `booking_date`, `start_time`, `end_time`, `total_cost`
 - Table `reservation_equipment`: Contains `reservation_id`, `equipment_type_id`, `quantity`
 - Table `facility_release_logs`: Contains `id`, `user_id`, `facility_type_id`, `released_at`
+- Table `wallet_transactions`: Contains `id`, `user_id`, `amount`, `type`, `description`, `created_at`
 
 ---
 
@@ -710,7 +711,7 @@ and total reservations count
 ## Users Credentials
 Please note that when restarting the back end, a Javascript file called init-db.mjs is run
 and database state is taken to the starting one, whose users are those below.
-This is to have the application database on a well-defined and well-known
+This is to have the application database in a well-defined and well-known
 starting status. Every other user created later will go lost
 
 |  username  |  plain-text password  |      role       |  initial_score  |   number_of_reservations  |
